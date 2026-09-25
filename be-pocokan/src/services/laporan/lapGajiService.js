@@ -54,6 +54,23 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
         [pabKode, periode1, periode2]
     );
 
+    const [potonganRows] = await db.query(
+        `
+        SELECT
+          gm_kar_nik AS id,
+          COALESCE(gm_potongan, 0) AS potongan
+        FROM tgajimingguan
+        WHERE gm_pab_kode = ?
+          AND gm_periode = ?
+          AND gm_periode2 = ?
+        `,
+        [pabKode, periode1, periode2]
+    );
+
+    const potonganMap = Object.fromEntries(
+        potonganRows.map((row) => [row.id, Number(row.potongan) || 0])
+    );
+
     return rows.map((row, index) => {
         const kehadiran =
             Number(row.kehadiran) || 0;
@@ -62,8 +79,11 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
             (Number(row.lemburLE2Nominal) || 0) +
             (Number(row.lemburGT2Nominal) || 0);
 
+        const potongan =
+            potonganMap[row.id] || 0;
+
         const thp =
-            kehadiran + lembur;
+            kehadiran + lembur - potongan;
 
         return {
             no: index + 1,
@@ -81,6 +101,7 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
 
             kehadiran,
             lembur,
+            potongan,
             thp,
 
             rekening: row.rekening || "",

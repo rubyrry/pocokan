@@ -45,6 +45,20 @@ const getProsesGaji = async (pabKode, periode1, periode2) => {
     summaryMap[row.kar_kode].lemburGT2 += lGT2;
   });
 
+  // Ambil potongan yang sudah tersimpan pada periode dan unit yang sama.
+  const [potonganRows] = await db.query(
+    `SELECT
+       gm_kar_nik AS kar_kode,
+       COALESCE(gm_potongan, 0) AS potongan
+     FROM tgajimingguan
+     WHERE gm_pab_kode = ? AND gm_periode = ? AND gm_periode2 = ?`,
+    [pabKode, periode1, periode2]
+  );
+
+  const potonganMap = Object.fromEntries(
+    potonganRows.map((row) => [row.kar_kode, Number(row.potongan) || 0])
+  );
+
   // Gabungkan
   const result = karyawan.map((k, idx) => {
     const s = summaryMap[k.id] || { kehadiran: 0, lemburLE2: 0, lemburGT2: 0 };
@@ -57,7 +71,8 @@ const getProsesGaji = async (pabKode, periode1, periode2) => {
       gapok: k.gapok,
       kehadiran: s.kehadiran,
       lemburLE2: s.lemburLE2,
-      lemburGT2: s.lemburGT2
+      lemburGT2: s.lemburGT2,
+      potongan: potonganMap[k.id] ?? 0
     };
   });
 
@@ -73,18 +88,30 @@ const saveProsesGaji = async (payload) => {
     throw new Error("Tidak ada data untuk disimpan.");
   }
 
+  const preparedItems = items.map((item) => {
+    const potongan = item.potongan == null || item.potongan === ""
+      ? 0
+      : Number(item.potongan);
+
+    if (!Number.isFinite(potongan) || potongan < 0) {
+      throw new Error(`Potongan karyawan ${item.id} harus berupa angka nol atau lebih.`);
+    }
+
+    return { item, potongan };
+  });
+
   // Hapus data lama pada rentang periode & unit tersebut di tgajimingguan
   await db.query(
     `DELETE FROM tgajimingguan WHERE gm_pab_kode = ? AND gm_periode = ? AND gm_periode2 = ?`,
     [pabKode, periode1, periode2]
   );
 
-  // Insert ulang semua item ke tgajimingguan (gm_pab_kode, gm_periode, gm_periode2, gm_kar_nik, gm_gapok, gm_hari, gm_jamlembur, gm_jamlembur2)
-  for (const item of items) {
+  // Insert ulang semua item ke tgajimingguan
+  for (const { item, potongan } of preparedItems) {
     await db.query(
-      `INSERT INTO tgajimingguan 
-       (gm_pab_kode, gm_periode, gm_periode2, gm_kar_nik, gm_gapok, gm_hari, gm_jamlembur, gm_jamlembur2) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tgajimingguan
+       (gm_pab_kode, gm_periode, gm_periode2, gm_kar_nik, gm_gapok, gm_hari, gm_jamlembur, gm_jamlembur2, gm_potongan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         pabKode,
         periode1,
@@ -93,7 +120,8 @@ const saveProsesGaji = async (payload) => {
         Number(item.gapok) || 0,
         Number(item.kehadiran) || 0,
         Number(item.lemburLE2) || 0,
-        Number(item.lemburGT2) || 0
+        Number(item.lemburGT2) || 0,
+        potongan
       ]
     );
   }

@@ -10,6 +10,7 @@ export interface LapGajiItem {
     lemburGT2: number;
     kehadiran: number;
     lembur: number;
+    potongan: number;
     thp: number;
     rekening: string;
 }

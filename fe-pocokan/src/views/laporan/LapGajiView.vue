@@ -53,6 +53,7 @@ const headers = [
   { title: "Lembur > 2", key: "lemburGT2", width: "110px", align: "center" as const },
   { title: "Kehadiran", key: "kehadiran", width: "120px", align: "end" as const },
   { title: "Lembur", key: "lembur", width: "120px", align: "end" as const },
+  { title: "Potongan", key: "potongan", width: "120px", align: "end" as const },
   { title: "THP", key: "thp", width: "130px", align: "end" as const },
   { title: "Rekening", key: "rekening", width: "150px", align: "start" as const },
 ];
@@ -67,6 +68,13 @@ const totalKehadiran = computed(() =>
 const totalLembur = computed(() =>
   items.value.reduce(
     (sum, row) => sum + Number(row.lembur || 0),
+    0
+  )
+);
+
+const totalPotongan = computed(() =>
+  items.value.reduce(
+    (sum, row) => sum + Number(row.potongan || 0),
     0
   )
 );
@@ -88,6 +96,7 @@ const filterValues = computed(() => ({
 const summaryColumns = [
   { key: "kehadiran" },
   { key: "lembur" },
+  { key: "potongan" },
   { key: "thp" },
 ];
 
@@ -162,6 +171,12 @@ const exportExcelData = () => {
         align: "right",
       },
       {
+        header: "Potongan",
+        key: "potongan",
+        width: 18,
+        align: "right",
+      },
+      {
         header: "THP",
         key: "thp",
         width: 18,
@@ -186,6 +201,7 @@ const exportExcelData = () => {
         lemburGT2: "",
         kehadiran: totalKehadiran.value,
         lembur: totalLembur.value,
+        potongan: totalPotongan.value,
         thp: totalTHP.value,
         rekening: "",
       },
@@ -250,6 +266,10 @@ const exportExcelData = () => {
     </template>
 
     <template #item.lembur="{ value }">
+      <span class="num-cell">{{ formatNumber(value) }}</span>
+    </template>
+
+    <template #item.potongan="{ value }">
       <span class="num-cell">{{ formatNumber(value) }}</span>
     </template>
 

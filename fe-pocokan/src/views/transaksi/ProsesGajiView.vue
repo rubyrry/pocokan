@@ -44,6 +44,7 @@ const headers = [
   { title: "Kehadiran", key: "kehadiran", width: "120px", align: "center" as const },
   { title: "Lembur <= 2", key: "lemburLE2", width: "130px", align: "center" as const },
   { title: "Lembur > 2", key: "lemburGT2", width: "130px", align: "center" as const },
+  { title: "Potongan", key: "potongan", width: "140px", align: "end" as const },
 ];
 
 // Auto refresh saat filter berubah (pola browse)
@@ -109,6 +110,7 @@ const exportExcelData = () => {
       { header: "Kehadiran", key: "kehadiran", width: 12, align: "center" },
       { header: "Lembur <= 2", key: "lemburLE2", width: 14, align: "center" },
       { header: "Lembur > 2", key: "lemburGT2", width: 14, align: "center" },
+      { header: "Potongan", key: "potongan", width: 18, align: "right" },
     ],
     rows: items.value,
   });
@@ -176,7 +178,7 @@ const exportExcelData = () => {
       </v-btn>
     </template>
 
-    <!-- ── Sel yang read-only (atau tampil biasa) ── -->
+    <!-- ── Tampilan kolom ── -->
     <template #item.kehadiran="{ item }">
       <span>{{ item.kehadiran }}</span>
     </template>
@@ -187,6 +189,20 @@ const exportExcelData = () => {
 
     <template #item.lemburGT2="{ item }">
       <span>{{ item.lemburGT2 }}</span>
+    </template>
+
+    <template #item.potongan="{ item }">
+      <span class="editable-cell">
+        <input
+          v-model.number="item.potongan"
+          type="number"
+          class="table-inp"
+          min="0"
+          step="any"
+          inputmode="decimal"
+          aria-label="Potongan"
+        />
+      </span>
     </template>
   </BaseBrowse>
 </template>
@@ -241,7 +257,7 @@ const exportExcelData = () => {
   border-radius: 3px;
 }
 .table-inp {
-  width: 70px;
+  width: 110px;
   height: 26px;
   border: 1px solid #d1d5db;
   border-radius: 3px;
