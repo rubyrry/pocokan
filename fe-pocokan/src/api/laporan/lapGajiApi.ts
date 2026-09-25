@@ -1,0 +1,33 @@
+import api from "@/api/axios";
+
+export interface LapGajiItem {
+    no: number;
+    id: string;
+    nama: string;
+    bagian: string;
+    hari: number;
+    lemburLE2: number;
+    lemburGT2: number;
+    kehadiran: number;
+    lembur: number;
+    thp: number;
+    rekening: string;
+}
+
+export const lapGajiApi = {
+    getData: async (
+        pabKode: string,
+        periode1: string,
+        periode2: string
+    ): Promise<LapGajiItem[]> => {
+        const { data } = await api.get("/laporan/lap-gaji", {
+            params: {
+                pabKode,
+                periode1,
+                periode2,
+            },
+        });
+
+        return data.data;
+    },
+};
