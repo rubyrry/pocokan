@@ -746,6 +746,18 @@ const router = createRouter({
       },
     },
     {
+      path: "/laporan/lap-gaji/slip",
+      name: "SlipGajiPrint",
+      component: () =>
+        import("@/views/laporan/SlipGajiPrintView.vue"),
+      meta: {
+        layout: "BlankLayout",
+        requiresAuth: true,
+        menuId: "10",
+        title: "Slip Gaji",
+      },
+    },
+    {
       path: "/laporan/lap-absensi",
       name: "LapAbsensi",
       component: () => import("@/views/laporan/LapAbsensiView.vue"),

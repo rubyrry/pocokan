@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { useToast } from "vue-toastification";
-import { IconList, IconDownload } from "@tabler/icons-vue";
+import { IconList, IconDownload, IconPrinter } from "@tabler/icons-vue";
 
 import BaseBrowse from "@/components/BaseBrowse.vue";
-import { unitApi, type Unit } from "@/api/master/unitApi";
 import {
   lapGajiApi,
   type LapGajiItem,
 } from "@/api/laporan/lapGajiApi";
-import { exportToExcel } from "@/utils/exportExcel";
+import {
+  exportToMultiSheetExcel,
+  type MultiSheetExportColumn,
+} from "@/utils/exportMultiSheetExcel";
+import { formatTerbilangGaji } from "@/utils/terbilang";
 
 const toast = useToast();
+const router = useRouter();
 const MENU_ID = "10"; // Sesuai tmenu Lap. Gaji
 
 const getTodayFormatted = () => {
@@ -23,30 +28,16 @@ const getTodayFormatted = () => {
 const periode1 = ref(getTodayFormatted());
 const periode2 = ref(getTodayFormatted());
 
-const unitList = ref<Unit[]>([]);
-const selectedUnit = ref("");
-
 // Data laporan
-const items = ref<LapGajiItem[]>([]);
+type LapGajiReportItem = LapGajiItem & { terbilang: string };
+const items = ref<LapGajiReportItem[]>([]);
 const isLoading = ref(false);
-
-// Saat halaman pertama kali dibuka
-onMounted(async () => {
-  try {
-    unitList.value = await unitApi.getAll();
-
-    if (unitList.value.length > 0) {
-      selectedUnit.value = unitList.value[0].kode;
-    }
-  } catch (e) {
-    toast.error("Gagal memuat daftar unit.");
-  }
-});
 
 const headers = [
   { title: "No", key: "no", width: "55px", align: "center" as const },
   { title: "ID", key: "id", width: "80px", align: "center" as const },
   { title: "Nama", key: "nama", minWidth: "180px", align: "start" as const },
+  { title: "Unit", key: "unit", width: "90px", align: "center" as const, sortable: true },
   { title: "Bagian", key: "bagian", width: "120px", align: "start" as const },
   { title: "Hari", key: "hari", width: "70px", align: "center" as const },
   { title: "Lembur <= 2", key: "lemburLE2", width: "110px", align: "center" as const },
@@ -56,41 +47,13 @@ const headers = [
   { title: "Potongan", key: "potongan", width: "120px", align: "end" as const },
   { title: "THP", key: "thp", width: "130px", align: "end" as const },
   { title: "Rekening", key: "rekening", width: "150px", align: "start" as const },
+  { title: "Terbilang", key: "terbilang", width: "300px", align: "start" as const },
 ];
-
-const totalKehadiran = computed(() =>
-  items.value.reduce(
-    (sum, row) => sum + Number(row.kehadiran || 0),
-    0
-  )
-);
-
-const totalLembur = computed(() =>
-  items.value.reduce(
-    (sum, row) => sum + Number(row.lembur || 0),
-    0
-  )
-);
-
-const totalPotongan = computed(() =>
-  items.value.reduce(
-    (sum, row) => sum + Number(row.potongan || 0),
-    0
-  )
-);
-
-const totalTHP = computed(() =>
-  items.value.reduce(
-    (sum, row) => sum + Number(row.thp || 0),
-    0
-  )
-);
 
 // Auto refresh saat filter berubah (pola browse)
 const filterValues = computed(() => ({
   periode1: periode1.value,
   periode2: periode2.value,
-  selectedUnit: selectedUnit.value,
 }));
 
 const summaryColumns = [
@@ -103,16 +66,19 @@ const summaryColumns = [
 // Saat filter dipicu refresh (pola BaseBrowse)
 const loadData = async () => {
   if (!periode1.value || !periode2.value) return;
-  if (!selectedUnit.value) return;
 
   isLoading.value = true;
 
   try {
-    items.value = await lapGajiApi.getData(
-      selectedUnit.value,
+    const data = await lapGajiApi.getData(
       periode1.value,
       periode2.value
     );
+
+    items.value = data.map((item) => ({
+      ...item,
+      terbilang: formatTerbilangGaji(item.thp),
+    }));
   } catch (e: any) {
     toast.error(
       e.response?.data?.message ??
@@ -123,6 +89,10 @@ const loadData = async () => {
   }
 };
 
+onMounted(() => {
+  void loadData();
+});
+
 // Format nominal uang agar lebih enak dibaca
 const formatNumber = (value: number) => {
   return new Intl.NumberFormat("id-ID", {
@@ -130,83 +100,175 @@ const formatNumber = (value: number) => {
   }).format(Number(value) || 0);
 };
 
-const exportExcelData = () => {
+const laporanGajiExportColumns: MultiSheetExportColumn[] = [
+  { header: "No", key: "no", width: 8, align: "center" },
+  { header: "ID", key: "id", width: 12, align: "center" },
+  { header: "Nama", key: "nama", width: 30 },
+  { header: "Unit", key: "unit", width: 12, align: "center" },
+  { header: "Bagian", key: "bagian", width: 20 },
+  { header: "Hari", key: "hari", width: 10, align: "center" },
+  {
+    header: "Lembur <= 2",
+    key: "lemburLE2",
+    width: 15,
+    align: "center",
+  },
+  {
+    header: "Lembur > 2",
+    key: "lemburGT2",
+    width: 15,
+    align: "center",
+  },
+  {
+    header: "Kehadiran",
+    key: "kehadiran",
+    width: 18,
+    align: "right",
+  },
+  {
+    header: "Lembur",
+    key: "lembur",
+    width: 18,
+    align: "right",
+  },
+  {
+    header: "Potongan",
+    key: "potongan",
+    width: 18,
+    align: "right",
+  },
+  {
+    header: "THP",
+    key: "thp",
+    width: 18,
+    align: "right",
+  },
+  {
+    header: "Rekening",
+    key: "rekening",
+    width: 22,
+  },
+  {
+    header: "Terbilang",
+    key: "terbilang",
+    width: 45,
+    italic: true,
+  },
+];
+
+type PaymentType = "cash" | "tf";
+
+type SalaryExportGroup = {
+  unit: string;
+  payment: PaymentType;
+  rows: LapGajiReportItem[];
+};
+
+type SalaryNumericKey = "kehadiran" | "lembur" | "potongan" | "thp";
+
+const sumSalaryRows = (rows: LapGajiReportItem[], key: SalaryNumericKey) =>
+  rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+
+const exportExcelData = async () => {
   if (!items.value.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
 
-  exportToExcel({
-    title: `Laporan Gaji ${periode1.value} s/d ${periode2.value}`,
-    filenamePrefix: `laporan-gaji-${selectedUnit.value}-${periode1.value}-${periode2.value}`,
+  const groups = new Map<string, SalaryExportGroup>();
 
-    columns: [
-      { header: "No", key: "no", width: 8, align: "center" },
-      { header: "ID", key: "id", width: 12, align: "center" },
-      { header: "Nama", key: "nama", width: 30 },
-      { header: "Bagian", key: "bagian", width: 20 },
-      { header: "Hari", key: "hari", width: 10, align: "center" },
-      {
-        header: "Lembur <= 2",
-        key: "lemburLE2",
-        width: 15,
-        align: "center",
-      },
-      {
-        header: "Lembur > 2",
-        key: "lemburGT2",
-        width: 15,
-        align: "center",
-      },
-      {
-        header: "Kehadiran",
-        key: "kehadiran",
-        width: 18,
-        align: "right",
-      },
-      {
-        header: "Lembur",
-        key: "lembur",
-        width: 18,
-        align: "right",
-      },
-      {
-        header: "Potongan",
-        key: "potongan",
-        width: 18,
-        align: "right",
-      },
-      {
-        header: "THP",
-        key: "thp",
-        width: 18,
-        align: "right",
-      },
-      {
-        header: "Rekening",
-        key: "rekening",
-        width: 22,
-      },
-    ],
+  items.value.forEach((row) => {
+    const unit = String(row.unit ?? "-").trim().toLowerCase() || "-";
+    const payment: PaymentType =
+      String(row.rekening ?? "").trim() === "" ? "cash" : "tf";
+    const key = JSON.stringify([unit, payment]);
+    const group = groups.get(key);
 
-    rows: [
-      ...items.value,
-      {
-        no: "",
-        id: "",
-        nama: "",
-        bagian: "TOTAL",
-        hari: "",
-        lemburLE2: "",
-        lemburGT2: "",
-        kehadiran: totalKehadiran.value,
-        lembur: totalLembur.value,
-        potongan: totalPotongan.value,
-        thp: totalTHP.value,
-        rekening: "",
-      },
-    ],
+    if (group) {
+      group.rows.push(row);
+      return;
+    }
+
+    groups.set(key, { unit, payment, rows: [row] });
   });
+
+  const paymentOrder: Record<PaymentType, number> = {
+    cash: 0,
+    tf: 1,
+  };
+  const sheets = Array.from(groups.values())
+    .sort(
+      (a, b) =>
+        a.unit.localeCompare(b.unit) ||
+        paymentOrder[a.payment] - paymentOrder[b.payment]
+    )
+    .map((group) => {
+      const totalTHP = sumSalaryRows(group.rows, "thp");
+
+      return {
+        name: `${group.unit}-${group.payment}`,
+        columns: laporanGajiExportColumns,
+        dataCount: group.rows.length,
+        rows: [
+          ...group.rows,
+          {
+            no: "",
+            id: "",
+            nama: "",
+            unit: "",
+            bagian: "TOTAL",
+            hari: "",
+            lemburLE2: "",
+            lemburGT2: "",
+            kehadiran: sumSalaryRows(group.rows, "kehadiran"),
+            lembur: sumSalaryRows(group.rows, "lembur"),
+            potongan: sumSalaryRows(group.rows, "potongan"),
+            thp: totalTHP,
+            rekening: "",
+            terbilang: formatTerbilangGaji(totalTHP),
+          },
+        ],
+      };
+    });
+
+  try {
+    await exportToMultiSheetExcel({
+      title: `Laporan Gaji ${periode1.value} s/d ${periode2.value}`,
+      filenamePrefix: `laporan-gaji-${periode1.value}-${periode2.value}`,
+      sheets,
+    });
+  } catch (error) {
+    console.error(error);
+    toast.error("Gagal mengekspor laporan gaji.");
+  }
+};
+
+// Jumlah slip yang BENAR-BENAR eligible dicetak:
+// cash (tanpa rekening) DAN THP (nilai final "Di terima") > 0.
+// Harus sama dengan filter di SlipGajiPrintView agar count tombol konsisten.
+const cashCount = computed(
+  () =>
+    items.value.filter(
+      (row) =>
+        String(row.rekening ?? "").trim() === "" && Number(row.thp) > 0
+    ).length
+);
+
+// Cetak slip gaji khusus yang tidak punya rekening (cash) dan THP > 0,
+// dibuka di tab baru dengan ukuran kertas 152mm x 90mm.
+const printSlipCash = () => {
+  if (cashCount.value === 0) {
+    toast.warning("Tidak ada karyawan cash dengan pembayaran > 0 untuk dicetak.");
+    return;
+  }
+  const url = router.resolve({
+    name: "SlipGajiPrint",
+    query: {
+      periode1: periode1.value,
+      periode2: periode2.value,
+    },
+  }).href;
+  window.open(url, "_blank");
 };
 </script>
 
@@ -221,6 +283,7 @@ const exportExcelData = () => {
     item-value="no"
     :summary-columns="summaryColumns"
     :filter-values="filterValues"
+    :fixed-layout="false"
     @refresh="loadData"
   >
     <!-- ── Filter ── -->
@@ -231,22 +294,9 @@ const exportExcelData = () => {
         <span class="filter-sep">s/d</span>
         <input v-model="periode2" type="date" class="date-inp" />
       </div>
-
-      <div class="filter-group">
-        <span class="filter-lbl">Unit</span>
-        <select v-model="selectedUnit" class="select-inp">
-          <option
-            v-for="u in unitList"
-            :key="u.kode"
-            :value="u.kode"
-          >
-            {{ u.kode }} — {{ u.nama }}
-          </option>
-        </select>
-      </div>
     </template>
 
-    <!-- ── Export ── -->
+    <!-- ── Export & Cetak ── -->
     <template #extra-actions>
       <v-btn
         size="small"
@@ -257,6 +307,17 @@ const exportExcelData = () => {
       >
         <IconDownload :size="16" class="mr-1" />
         Export
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="tonal"
+        color="primary"
+        @click="printSlipCash"
+        :disabled="cashCount === 0"
+        :title="`Cetak ${cashCount} slip cash`"
+      >
+        <IconPrinter :size="16" class="mr-1" />
+        Cetak Slip
       </v-btn>
     </template>
 
@@ -275,6 +336,10 @@ const exportExcelData = () => {
 
     <template #item.thp="{ value }">
       <span class="num-cell font-weight-medium">{{ formatNumber(value) }}</span>
+    </template>
+
+    <template #item.terbilang="{ value }">
+      <span class="terbilang-cell">{{ value }}</span>
     </template>
   </BaseBrowse>
 </template>
@@ -308,21 +373,10 @@ const exportExcelData = () => {
 .date-inp:focus {
   border-color: #3B5998;
 }
-.select-inp {
-  height: 32px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  padding: 0 8px;
-  font-size: 12px;
-  outline: none;
-  min-width: 220px;
-  background: #fff;
-  cursor: pointer;
-}
-.select-inp:focus {
-  border-color: #3B5998;
-}
 .num-cell {
   font-variant-numeric: tabular-nums;
+}
+.terbilang-cell {
+  font-style: italic;
 }
 </style>
