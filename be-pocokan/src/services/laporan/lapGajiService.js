@@ -1,11 +1,15 @@
 const db = require("../../config/database");
 
-const getLapGaji = async (pabKode, periode1, periode2) => {
+const getPotonganKey = (unit, id) =>
+    JSON.stringify([String(unit ?? ""), String(id ?? "")]);
+
+const getLapGaji = async (periode1, periode2) => {
     const [rows] = await db.query(
         `
     SELECT
       ab_kar_kode AS id,
       kar_nama AS nama,
+      ab_pab_kode AS unit,
       bag_nama AS bagian,
 
       SUM(ab_hari) AS hari,
@@ -38,10 +42,10 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
     INNER JOIN tbagian
       ON bag_kode = kar_bag_kode
 
-    WHERE ab_pab_kode = ?
-      AND ab_tanggal BETWEEN ? AND ?
+    WHERE ab_tanggal BETWEEN ? AND ?
 
     GROUP BY
+      ab_pab_kode,
       ab_kar_kode,
       kar_kode,
       kar_nama,
@@ -49,26 +53,29 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
       kar_gapok,
       kar_rekening
 
-    ORDER BY ab_kar_kode
+    ORDER BY ab_pab_kode, ab_kar_kode
     `,
-        [pabKode, periode1, periode2]
+        [periode1, periode2]
     );
 
     const [potonganRows] = await db.query(
         `
         SELECT
+          gm_pab_kode AS unit,
           gm_kar_nik AS id,
           COALESCE(gm_potongan, 0) AS potongan
         FROM tgajimingguan
-        WHERE gm_pab_kode = ?
-          AND gm_periode = ?
+        WHERE gm_periode = ?
           AND gm_periode2 = ?
         `,
-        [pabKode, periode1, periode2]
+        [periode1, periode2]
     );
 
     const potonganMap = Object.fromEntries(
-        potonganRows.map((row) => [row.id, Number(row.potongan) || 0])
+        potonganRows.map((row) => [
+            getPotonganKey(row.unit, row.id),
+            Number(row.potongan) || 0,
+        ])
     );
 
     return rows.map((row, index) => {
@@ -80,7 +87,7 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
             (Number(row.lemburGT2Nominal) || 0);
 
         const potongan =
-            potonganMap[row.id] || 0;
+            potonganMap[getPotonganKey(row.unit, row.id)] ?? 0;
 
         const thp =
             kehadiran + lembur - potongan;
@@ -89,6 +96,7 @@ const getLapGaji = async (pabKode, periode1, periode2) => {
             no: index + 1,
             id: row.id,
             nama: row.nama,
+            unit: row.unit || "-",
             bagian: row.bagian,
 
             hari: Number(row.hari) || 0,

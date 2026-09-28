@@ -38,7 +38,7 @@ const getKaryawanByUnit = async (pabKode, tanggal) => {
     nama: k.nama,
     unit: k.unit,
     bagian: k.bagian,
-    kehadiran: mapExisting[k.id] !== undefined ? mapExisting[k.id].kehadiran : 1, // Default 1
+    kehadiran: mapExisting[k.id] !== undefined ? mapExisting[k.id].kehadiran : 0, // Default 0
     jamlembur: mapExisting[k.id] !== undefined ? mapExisting[k.id].jamlembur : 0  // Default 0
   }));
 
