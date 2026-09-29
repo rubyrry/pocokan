@@ -72,7 +72,7 @@ const getProsesGaji = async (pabKode, periode1, periode2) => {
       kehadiran: s.kehadiran,
       lemburLE2: s.lemburLE2,
       lemburGT2: s.lemburGT2,
-      potongan: potonganMap[k.id] ?? 0
+      potongan: potonganMap[k.id] ?? null
     };
   });
 
@@ -88,17 +88,22 @@ const saveProsesGaji = async (payload) => {
     throw new Error("Tidak ada data untuk disimpan.");
   }
 
-  const preparedItems = items.map((item) => {
-    const potongan = item.potongan == null || item.potongan === ""
-      ? 0
-      : Number(item.potongan);
+  // Potongan yang belum diisi bukan nol; hanya simpan karyawan yang
+  // potongannya sudah diisi (termasuk nilai 0 yang disengaja).
+  const preparedItems = items
+    .filter((item) => item.potongan !== null && item.potongan !== undefined && item.potongan !== "")
+    .map((item) => {
+      const potongan = Number(item.potongan);
 
-    if (!Number.isFinite(potongan) || potongan < 0) {
-      throw new Error(`Potongan karyawan ${item.id} harus berupa angka nol atau lebih.`);
-    }
+      if (!Number.isFinite(potongan) || potongan < 0) {
+        throw new Error(`Potongan karyawan ${item.id} harus berupa angka nol atau lebih.`);
+      }
 
-    return { item, potongan };
-  });
+      return { item, potongan };
+    });
+  if (!preparedItems.length) {
+    throw new Error("Isi potongan minimal satu karyawan sebelum menyimpan.");
+  }
 
   // Hapus data lama pada rentang periode & unit tersebut di tgajimingguan
   await db.query(
@@ -106,7 +111,7 @@ const saveProsesGaji = async (payload) => {
     [pabKode, periode1, periode2]
   );
 
-  // Insert ulang semua item ke tgajimingguan
+  // Insert ulang hanya item dengan potongan terisi ke tgajimingguan
   for (const { item, potongan } of preparedItems) {
     await db.query(
       `INSERT INTO tgajimingguan
@@ -126,7 +131,7 @@ const saveProsesGaji = async (payload) => {
     );
   }
 
-  return { savedCount: items.length };
+  return { savedCount: preparedItems.length };
 };
 
 module.exports = { getProsesGaji, saveProsesGaji };

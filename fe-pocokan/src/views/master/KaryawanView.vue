@@ -228,16 +228,6 @@ const handleDelete = async (item: Karyawan) => {
           </div>
 
           <div class="f-row">
-            <label class="f-lbl">Lembur</label>
-            <input type="number" v-model.number="form.lembur" class="f-inp-native tr" :disabled="isSaving" placeholder="0" />
-          </div>
-
-          <div class="f-row">
-            <label class="f-lbl">Lembur 2</label>
-            <input type="number" v-model.number="form.lembur2" class="f-inp-native tr" :disabled="isSaving" placeholder="0" />
-          </div>
-
-          <div class="f-row">
             <label class="f-lbl">No. Rekening</label>
             <input type="text" v-model="form.rekening" class="f-inp-native" :disabled="isSaving" placeholder="No Rekening" />
           </div>

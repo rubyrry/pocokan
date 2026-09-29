@@ -61,7 +61,15 @@ const props = withDefaults(
     fixedLayout?: boolean;
     filterValues?: Record<string, any>;
     autoRefresh?: boolean;
-    summaryColumns?: { key: string; label?: string; numFmt?: string }[];
+    summaryColumns?: {
+      key: string;
+      label?: string;
+      numFmt?: string;
+      currency?: boolean;
+      maxFractionDigits?: number;
+      sumKey?: string;
+      formatTotal?: (total: number) => string;
+    }[];
   }>(),
   {
     icon: () => IconTable,
@@ -416,10 +424,14 @@ const summaryTotals = computed(() => {
   const result: Record<string, string> = {};
   for (const col of props.summaryColumns) {
     const total = filteredItems.value.reduce(
-      (sum, item) => sum + (Number(item[col.key]) || 0),
+      (sum, item) => sum + (Number(item[col.sumKey ?? col.key]) || 0),
       0,
     );
-    result[col.key] = new Intl.NumberFormat("id-ID").format(total);
+    result[col.key] = col.formatTotal
+      ? col.formatTotal(total)
+      : new Intl.NumberFormat("id-ID", {
+          maximumFractionDigits: col.maxFractionDigits ?? 3,
+        }).format(total);
   }
   return result;
 });
@@ -452,9 +464,13 @@ const injectTfoot = () => {
     const totalCols = ths.length;
 
     // Map summaryColumns by key for quick lookup
-    const summaryMap: Record<string, string> = {};
+    const summaryMap: Record<string, { value: string; currency?: boolean; text?: boolean }> = {};
     for (const col of props.summaryColumns) {
-      summaryMap[col.key] = summaryTotals.value[col.key] || "0";
+      summaryMap[col.key] = {
+        value: summaryTotals.value[col.key] || "0",
+        currency: col.currency,
+        text: !!col.formatTotal,
+      };
     }
 
     // Find which header keys map to which column index
@@ -475,8 +491,20 @@ const injectTfoot = () => {
       // Check if this column has a summary value
       const key = colKeys[i] || "";
       if (summaryMap[key]) {
-        td.textContent = summaryMap[key];
+        if (summaryMap[key].currency) {
+          const content = document.createElement("span");
+          content.className = "summary-tfoot-currency";
+          const prefix = document.createElement("span");
+          prefix.textContent = "Rp";
+          const amount = document.createElement("span");
+          amount.textContent = summaryMap[key].value;
+          content.append(prefix, amount);
+          td.appendChild(content);
+        } else {
+          td.textContent = summaryMap[key].value;
+        }
         td.classList.add("summary-tfoot-val");
+        if (summaryMap[key].text) td.classList.add("summary-tfoot-text");
       } else if (i === 0) {
         td.textContent = "TOTAL";
         td.classList.add("summary-tfoot-label");
@@ -1161,6 +1189,15 @@ watch(
   font-family: monospace;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.base-table :deep(tfoot td.summary-tfoot-text) {
+  text-align: left;
+  font-style: italic;
+}
+.base-table :deep(tfoot .summary-tfoot-currency) {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 /* Pagination */
