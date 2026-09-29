@@ -23,6 +23,9 @@ const selectedUnit = ref("");
 const items = ref<ProsesGajiItem[]>([]);
 const isLoading = ref(false);
 const isSaving = ref(false);
+const hasFilledPotongan = computed(() =>
+  items.value.some((item) => item.potongan !== null && item.potongan !== "")
+);
 
 onMounted(async () => {
   try {
@@ -76,6 +79,17 @@ const handleSave = async () => {
     toast.warning("Tidak ada data untuk disimpan.");
     return;
   }
+  if (!hasFilledPotongan.value) {
+    toast.warning("Isi potongan minimal satu karyawan sebelum menyimpan.");
+    return;
+  }
+  if (items.value.some((item) =>
+    item.potongan !== null && item.potongan !== "" &&
+    (!Number.isFinite(Number(item.potongan)) || Number(item.potongan) < 0)
+  )) {
+    toast.warning("Potongan harus berupa angka nol atau lebih.");
+    return;
+  }
 
   isSaving.value = true;
   try {
@@ -112,7 +126,10 @@ const exportExcelData = () => {
       { header: "Lembur > 2", key: "lemburGT2", width: 14, align: "center" },
       { header: "Potongan", key: "potongan", width: 18, align: "right" },
     ],
-    rows: items.value,
+    rows: items.value.map((item) => ({
+      ...item,
+      potongan: item.potongan ?? "",
+    })),
   });
 };
 </script>
@@ -171,7 +188,7 @@ const exportExcelData = () => {
         variant="flat"
         @click="handleSave"
         :loading="isSaving"
-        :disabled="!items.length"
+        :disabled="!items.length || !hasFilledPotongan"
       >
         <IconDeviceFloppy :size="16" class="mr-1" />
         Save

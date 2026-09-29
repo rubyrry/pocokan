@@ -6,8 +6,10 @@ export interface MultiSheetExportColumn {
   key: string;
   width?: number;
   currency?: boolean;
+  numFmt?: string;
   align?: "left" | "center" | "right";
   italic?: boolean;
+  noWrap?: boolean;
 }
 
 export interface MultiSheetExportSheet {
@@ -15,6 +17,7 @@ export interface MultiSheetExportSheet {
   columns: MultiSheetExportColumn[];
   rows: any[];
   dataCount?: number;
+  totalMergeThroughKey?: string;
 }
 
 export interface MultiSheetExportOptions {
@@ -85,11 +88,21 @@ export const exportToMultiSheetExcel = async ({
 
   sheets.forEach((sheet, index) => {
     const worksheet = workbook.addWorksheet(sheetNames[index]);
-    worksheet.columns = sheet.columns.map((column) => ({
-      header: column.header,
-      key: column.key,
-      width: column.width ?? 18,
-    }));
+    worksheet.columns = sheet.columns.map((column) => {
+      const longestText = column.noWrap
+        ? sheet.rows.reduce(
+            (length, item) => Math.max(length, String(item[column.key] ?? "").length),
+            column.header.length
+          )
+        : 0;
+      return {
+        header: column.header,
+        key: column.key,
+        width: column.noWrap
+          ? Math.min(255, Math.max(column.width ?? 18, Math.ceil(longestText * 1.2) + 4))
+          : column.width ?? 18,
+      };
+    });
 
     worksheet.mergeCells(1, 1, 1, sheet.columns.length);
     worksheet.getCell("A1").value =
@@ -113,7 +126,8 @@ export const exportToMultiSheetExcel = async ({
     });
     headerRow.height = 20;
 
-    sheet.rows.forEach((item) => {
+    sheet.rows.forEach((item, rowIndex) => {
+      const isTotalRow = !!sheet.totalMergeThroughKey && rowIndex === sheet.rows.length - 1;
       const rowData: Record<string, unknown> = {};
       sheet.columns.forEach((column) => {
         rowData[column.key] =
@@ -121,18 +135,36 @@ export const exportToMultiSheetExcel = async ({
       });
 
       const row = worksheet.addRow(rowData);
-      row.eachCell((cell, columnNumber) => {
+      // Border mengikuti seluruh kolom tabel, termasuk sel total yang kosong.
+      sheet.columns.forEach((column, columnIndex) => {
+        const cell = row.getCell(columnIndex + 1);
         cell.border = borderAll;
-        const column = sheet.columns[columnNumber - 1];
-        cell.font = { size: 10, italic: column?.italic ?? false };
+        cell.font = { size: 10, italic: column?.italic ?? false, bold: isTotalRow };
+        if (column.noWrap) {
+          cell.alignment = { wrapText: false, vertical: "middle" };
+        }
 
-        if (column?.currency) {
-          cell.numFmt = '"Rp" #,##0';
+        if (column.currency) {
+          cell.numFmt = column.numFmt ?? '"Rp"* #,##0.00';
           cell.alignment = { horizontal: "right" };
+        } else if (column?.numFmt) {
+          cell.numFmt = column.numFmt;
+          cell.alignment = { horizontal: column.align ?? "right" };
         } else if (column?.align) {
           cell.alignment = { horizontal: column.align };
         }
       });
+      if (isTotalRow) {
+        const lastColumn = sheet.columns.findIndex(
+          (column) => column.key === sheet.totalMergeThroughKey
+        ) + 1;
+        if (lastColumn > 1) {
+          worksheet.mergeCells(row.number, 1, row.number, lastColumn);
+          const labelCell = row.getCell(1);
+          labelCell.font = { size: 10, bold: true };
+          labelCell.alignment = { vertical: "middle", horizontal: "center" };
+        }
+      }
       row.height = 16;
     });
 

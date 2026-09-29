@@ -4988,10 +4988,11 @@ export const exportToExcel = async ({
     columns.forEach((c) => (rowData[c.key] = item[c.key] ?? (c.currency ? 0 : "-")));
     const row = ws.addRow(rowData);
 
-    row.eachCell((cell, colNumber) => {
+    // Gambar border hanya pada kolom tabel, termasuk sel yang nilainya kosong.
+    columns.forEach((col, colIndex) => {
+      const cell = row.getCell(colIndex + 1);
       cell.border = borderAll;
       cell.font = { size: 10 };
-      const col = columns[colNumber - 1];
       if (col?.currency) {
         cell.numFmt = '"Rp" #,##0';
         cell.alignment = { horizontal: "right" };

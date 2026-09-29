@@ -167,7 +167,7 @@ const menus = [
     ],
   },
   {
-    title: "Library",
+    title: "Master",
     icon: IconBookmarks,
     menuId: null,
     children: [
@@ -195,6 +195,13 @@ const menus = [
         route: "/master/hari-libur",
         menuId: "7",
       },
+    ],
+  },
+  {
+    title: "Transaksi",
+    icon: IconArrowsExchange,
+    menuId: null,
+    children: [
       {
         title: "Absensi",
         icon: IconList,
@@ -210,7 +217,7 @@ const menus = [
     ],
   },
   {
-    title: "Reports",
+    title: "Laporan",
     icon: IconReportMoney,
     menuId: null,
     children: [

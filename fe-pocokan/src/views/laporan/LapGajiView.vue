@@ -13,7 +13,7 @@ import {
   exportToMultiSheetExcel,
   type MultiSheetExportColumn,
 } from "@/utils/exportMultiSheetExcel";
-import { formatTerbilangGaji } from "@/utils/terbilang";
+import { formatTerbilangGaji, roundTHPGaji } from "@/utils/terbilang";
 
 const toast = useToast();
 const router = useRouter();
@@ -57,10 +57,11 @@ const filterValues = computed(() => ({
 }));
 
 const summaryColumns = [
-  { key: "kehadiran" },
-  { key: "lembur" },
-  { key: "potongan" },
-  { key: "thp" },
+  { key: "kehadiran", currency: true, maxFractionDigits: 2 },
+  { key: "lembur", currency: true, maxFractionDigits: 2 },
+  { key: "potongan", currency: true, maxFractionDigits: 2 },
+  { key: "thp", currency: true, maxFractionDigits: 0 },
+  { key: "terbilang", sumKey: "thp", formatTotal: formatTerbilangGaji },
 ];
 
 // Saat filter dipicu refresh (pola BaseBrowse)
@@ -77,6 +78,7 @@ const loadData = async () => {
 
     items.value = data.map((item) => ({
       ...item,
+      thp: roundTHPGaji(item.thp),
       terbilang: formatTerbilangGaji(item.thp),
     }));
   } catch (e: any) {
@@ -96,9 +98,11 @@ onMounted(() => {
 // Format nominal uang agar lebih enak dibaca
 const formatNumber = (value: number) => {
   return new Intl.NumberFormat("id-ID", {
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(Number(value) || 0);
 };
+const formatWholeNumber = (value: number) =>
+  new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(roundTHPGaji(value));
 
 const laporanGajiExportColumns: MultiSheetExportColumn[] = [
   { header: "No", key: "no", width: 8, align: "center" },
@@ -123,25 +127,26 @@ const laporanGajiExportColumns: MultiSheetExportColumn[] = [
     header: "Kehadiran",
     key: "kehadiran",
     width: 18,
-    align: "right",
+    currency: true,
   },
   {
     header: "Lembur",
     key: "lembur",
     width: 18,
-    align: "right",
+    currency: true,
   },
   {
     header: "Potongan",
     key: "potongan",
     width: 18,
-    align: "right",
+    currency: true,
   },
   {
     header: "THP",
     key: "thp",
     width: 18,
-    align: "right",
+    currency: true,
+    numFmt: '"Rp"* #,##0',
   },
   {
     header: "Rekening",
@@ -153,6 +158,7 @@ const laporanGajiExportColumns: MultiSheetExportColumn[] = [
     key: "terbilang",
     width: 45,
     italic: true,
+    noWrap: true,
   },
 ];
 
@@ -209,14 +215,15 @@ const exportExcelData = async () => {
         name: `${group.unit}-${group.payment}`,
         columns: laporanGajiExportColumns,
         dataCount: group.rows.length,
+        totalMergeThroughKey: "lemburGT2",
         rows: [
           ...group.rows,
           {
-            no: "",
+            no: "TOTAL",
             id: "",
             nama: "",
             unit: "",
-            bagian: "TOTAL",
+            bagian: "",
             hari: "",
             lemburLE2: "",
             lemburGT2: "",
@@ -250,7 +257,7 @@ const cashCount = computed(
   () =>
     items.value.filter(
       (row) =>
-        String(row.rekening ?? "").trim() === "" && Number(row.thp) > 0
+        String(row.rekening ?? "").trim() === "" && row.thp > 0
     ).length
 );
 
@@ -323,19 +330,19 @@ const printSlipCash = () => {
 
     <!-- ── Custom cell angka ── -->
     <template #item.kehadiran="{ value }">
-      <span class="num-cell">{{ formatNumber(value) }}</span>
+      <span class="currency-cell"><span>Rp</span><span>{{ formatNumber(value) }}</span></span>
     </template>
 
     <template #item.lembur="{ value }">
-      <span class="num-cell">{{ formatNumber(value) }}</span>
+      <span class="currency-cell"><span>Rp</span><span>{{ formatNumber(value) }}</span></span>
     </template>
 
     <template #item.potongan="{ value }">
-      <span class="num-cell">{{ formatNumber(value) }}</span>
+      <span class="currency-cell"><span>Rp</span><span>{{ formatNumber(value) }}</span></span>
     </template>
 
     <template #item.thp="{ value }">
-      <span class="num-cell font-weight-medium">{{ formatNumber(value) }}</span>
+      <span class="currency-cell font-weight-medium"><span>Rp</span><span>{{ formatWholeNumber(value) }}</span></span>
     </template>
 
     <template #item.terbilang="{ value }">
@@ -373,7 +380,11 @@ const printSlipCash = () => {
 .date-inp:focus {
   border-color: #3B5998;
 }
-.num-cell {
+.currency-cell {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   font-variant-numeric: tabular-nums;
 }
 .terbilang-cell {

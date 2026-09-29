@@ -6,8 +6,8 @@ export interface AbsensiItem {
   nama: string;
   unit: string;
   bagian: string;
-  kehadiran: number;
-  jamlembur: number;
+  kehadiran: number | null | "";
+  jamlembur: number | null | "";
 }
 
 export const absensiApi = {

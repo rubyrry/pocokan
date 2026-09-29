@@ -38,8 +38,8 @@ const getKaryawanByUnit = async (pabKode, tanggal) => {
     nama: k.nama,
     unit: k.unit,
     bagian: k.bagian,
-    kehadiran: mapExisting[k.id] !== undefined ? mapExisting[k.id].kehadiran : 0, // Default 0
-    jamlembur: mapExisting[k.id] !== undefined ? mapExisting[k.id].jamlembur : 0  // Default 0
+    kehadiran: mapExisting[k.id] !== undefined ? mapExisting[k.id].kehadiran : null, // Belum diisi
+    jamlembur: mapExisting[k.id] !== undefined ? mapExisting[k.id].jamlembur : null // Belum diisi
   }));
 
   return result;
@@ -54,15 +54,27 @@ const saveAbsensi = async (payload) => {
     throw new Error("Tidak ada data absensi untuk disimpan.");
   }
 
+  // Kolom yang belum diisi tidak menjadi absensi 0. Nilai 0 yang diisi
+  // secara sengaja tetap disimpan.
+  const filledItems = items.filter(item =>
+    item.kehadiran !== null && item.kehadiran !== undefined && item.kehadiran !== ""
+  );
+  if (!filledItems.length) {
+    throw new Error("Isi kehadiran minimal satu karyawan sebelum menyimpan.");
+  }
+  if (filledItems.some(item => ![0, 1].includes(Number(item.kehadiran)))) {
+    throw new Error("Kehadiran hanya boleh diisi 0 atau 1.");
+  }
+
   // Hapus dulu data absensi lama pada tanggal & unit tersebut (agar bersih / update re-save)
   await db.query(
     `DELETE FROM tabsensi WHERE ab_pab_kode = ? AND ab_tanggal = ?`,
     [pabKode, tanggal]
   );
 
-  // Insert ulang semua item
-  for (const item of items) {
-    const hari = Number(item.kehadiran) || 0;
+  // Insert ulang hanya baris dengan kehadiran yang terisi
+  for (const item of filledItems) {
+    const hari = Number(item.kehadiran);
     const jamlembur = Number(item.jamlembur) || 0;
     
     await db.query(
@@ -72,7 +84,7 @@ const saveAbsensi = async (payload) => {
     );
   }
 
-  return { savedCount: items.length };
+  return { savedCount: filledItems.length };
 };
 
 module.exports = { getKaryawanByUnit, saveAbsensi };

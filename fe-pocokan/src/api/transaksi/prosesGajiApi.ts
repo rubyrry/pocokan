@@ -10,7 +10,7 @@ export interface ProsesGajiItem {
   kehadiran: number;
   lemburLE2: number;
   lemburGT2: number;
-  potongan: number;
+  potongan: number | null | "";
 }
 
 export const prosesGajiApi = {

@@ -22,6 +22,9 @@ const selectedUnit = ref("");
 const items = ref<AbsensiItem[]>([]);
 const isLoading = ref(false);
 const isSaving = ref(false);
+const hasFilledKehadiran = computed(() =>
+  items.value.some((item) => item.kehadiran !== null && item.kehadiran !== "")
+);
 
 onMounted(async () => {
   try {
@@ -70,6 +73,17 @@ const loadData = async () => {
 const handleSave = async () => {
   if (items.value.length === 0) {
     toast.warning("Tidak ada data untuk disimpan.");
+    return;
+  }
+  if (!hasFilledKehadiran.value) {
+    toast.warning("Isi kehadiran minimal satu karyawan sebelum menyimpan.");
+    return;
+  }
+  if (items.value.some((item) =>
+    item.kehadiran !== null && item.kehadiran !== "" &&
+    ![0, 1].includes(Number(item.kehadiran))
+  )) {
+    toast.warning("Kehadiran hanya boleh diisi 0 atau 1.");
     return;
   }
 
@@ -163,7 +177,7 @@ const exportExcelData = () => {
         variant="flat"
         @click="handleSave"
         :loading="isSaving"
-        :disabled="!items.length"
+        :disabled="!items.length || !hasFilledKehadiran"
       >
         <IconDeviceFloppy :size="16" class="mr-1" />
         Save

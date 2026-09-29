@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { useToast } from "vue-toastification";
 import { IconPrinter } from "@tabler/icons-vue";
 import { lapGajiApi, type LapGajiItem } from "@/api/laporan/lapGajiApi";
-import { formatTerbilangGaji } from "@/utils/terbilang";
+import { formatTerbilangGaji, roundTHPGaji } from "@/utils/terbilang";
 import LogoImg from "@/assets/logo2.png";
 
 const route = useRoute();
@@ -55,9 +55,11 @@ const periodeText = computed(() => formatPeriode(periode1, periode2));
 
 const formatNumber = (value: number) => {
   return new Intl.NumberFormat("id-ID", {
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(Number(value) || 0);
 };
+const formatWholeNumber = (value: number) =>
+  new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(roundTHPGaji(value));
 
 const isCash = (rekening: unknown) =>
   String(rekening ?? "").trim() === "";
@@ -66,7 +68,7 @@ const isCash = (rekening: unknown) =>
 // THP = kehadiran + lembur - potongan (lihat lapGajiService.js),
 // sama dengan nilai "Di terima", jadi dipakai sebagai indikator final.
 const isEligibleSlip = (row: LapGajiItem) =>
-  isCash(row.rekening) && Number(row.thp) > 0;
+  isCash(row.rekening) && roundTHPGaji(row.thp) > 0;
 
 const loadData = async () => {
   if (!periode1 || !periode2) {
@@ -80,6 +82,7 @@ const loadData = async () => {
       .filter((row) => isEligibleSlip(row))
       .map((row) => ({
         ...row,
+        thp: roundTHPGaji(row.thp),
         terbilang: formatTerbilangGaji(row.thp),
       }));
     if (items.value.length === 0) {
@@ -172,24 +175,24 @@ onMounted(() => {
         <div class="kv-group slip-nominal">
           <div class="kv">
             <span class="k">Gaji</span><span class="c">:</span
-            ><span class="v">Rp. {{ formatNumber(row.kehadiran) }}</span>
+            ><span class="v">Rp {{ formatNumber(row.kehadiran) }}</span>
           </div>
           <div class="kv">
             <span class="k">Lembur</span><span class="c">:</span
-            ><span class="v">Rp. {{ formatNumber(row.lembur) }}</span>
+            ><span class="v">Rp {{ formatNumber(row.lembur) }}</span>
           </div>
           <div class="kv">
             <span class="k">Total</span><span class="c">:</span
-            ><span class="v">Rp. {{ formatNumber(row.thp) }}</span>
+            ><span class="v">Rp {{ formatWholeNumber(row.thp) }}</span>
           </div>
           <div class="kv">
             <span class="k">Pot. BS</span><span class="c">:</span
-            ><span class="v pot-bs">Rp. {{ formatNumber(row.potongan) }}</span>
+            ><span class="v pot-bs">Rp {{ formatNumber(row.potongan) }}</span>
           </div>
         </div>
 
         <div class="slip-diterima">
-          Di terima: Rp.{{ formatNumber(row.thp) }},-
+          Di terima: Rp {{ formatWholeNumber(row.thp) }}
         </div>
         <div class="slip-terbilang">{{ row.terbilang }}</div>
       </div>
@@ -242,9 +245,9 @@ onMounted(() => {
   border-radius: 4px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
-  width: 146mm;
-  min-height: 84mm;
-  padding: 6mm 5mm 4mm 8mm;
+  width: 152mm;
+  min-height: 90mm;
+  padding: 6mm 10mm 4mm 15mm;
   color: #000;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 8.5pt;
@@ -273,7 +276,7 @@ onMounted(() => {
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 6mm;
+  gap: 4mm;
   margin-bottom: 2.5mm;
 }
 .kv-group {
@@ -286,8 +289,8 @@ onMounted(() => {
   min-width: 0;
 }
 .kv-right {
-  flex: 0 0 50mm;
-  max-width: 50mm;
+  flex: 0 0 40mm;
+  max-width: 40mm;
 }
 .kv {
   display: grid;
@@ -358,10 +361,11 @@ onMounted(() => {
     box-shadow: none !important;
     background: #fff !important;
     box-sizing: border-box;
+    /* Margin fisik: kiri 15 mm, kanan 10 mm (termasuk margin halaman 3 mm). */
     width: 146mm;
     height: 84mm;
     min-height: auto;
-    padding: 2mm 0 0 3mm;
+    padding: 3mm 7mm 1mm 12mm;
     margin: 0;
     overflow: hidden;
     page-break-after: always;
