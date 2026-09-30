@@ -158,15 +158,15 @@ const ctxCloseTab = () => {
   hideContextMenu();
 };
 const ctxCloseOther = () => {
-  tabsStore.closeOtherTabs(ctxTabId.value);
+  void tabsStore.closeOtherTabs(ctxTabId.value);
   hideContextMenu();
 };
 const ctxCloseRight = () => {
-  tabsStore.closeTabsToRight(ctxTabId.value);
+  void tabsStore.closeTabsToRight(ctxTabId.value);
   hideContextMenu();
 };
 const ctxCloseAll = () => {
-  tabsStore.closeAllTabs();
+  void tabsStore.closeAllTabs();
   hideContextMenu();
 };
 
@@ -178,7 +178,9 @@ const onTabClick = (tab: TabItem) => {
 const closeTab = (tab: TabItem) => {
   if (!tab.closable) return;
   if (tab.onClose) tab.onClose();
-  tabsStore.closeTab(tab.id);
+  // Bisa sinkron (tanpa guard) atau Promise (kalau halaman mendaftarkan close
+  // guard), jadi hasilnya dibuang dengan `void`.
+  void tabsStore.closeTab(tab.id);
 };
 
 const onWheelScroll = (event: WheelEvent) => {

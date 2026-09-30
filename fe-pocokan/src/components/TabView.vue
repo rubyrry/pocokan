@@ -33,7 +33,19 @@ watch(
       tab.query && Object.keys(tab.query).length > 0
         ? { path: tab.path, query: tab.query }
         : tab.path;
-    router.push(target).catch(() => {});
+    router
+      .push(target)
+      .then((failure) => {
+        // Navigasi ditolak, misalnya guard "perubahan belum disimpan" di
+        // halaman yang kita tinggalkan. activeTabId sudah terlanjur diganti
+        // waktu tab diklik, jadi kembalikan ke tab yang cocok dengan route
+        // sekarang supaya tab aktif dan isi halaman tidak berbeda.
+        // Id tab = path, jadi satu path selalu menunjuk satu tab.
+        if (!failure) return;
+        const current = tabsStore.tabs.find((t) => t.path === route.path);
+        if (current && current.id !== id) tabsStore.setActiveTab(current.id);
+      })
+      .catch(() => {});
   },
   { immediate: true },
 );

@@ -101,9 +101,13 @@ const saveProsesGaji = async (payload) => {
 
       return { item, potongan };
     });
-  if (!preparedItems.length) {
-    throw new Error("Isi potongan minimal satu karyawan sebelum menyimpan.");
-  }
+  // preparedItems boleh kosong: admin sengaja mengosongkan potongan, dan DELETE
+  // di bawah tetap berjalan sehingga baris lamanya hilang. Menolak payload
+  // kosong membuat nilai yang sudah dikosongkan admin tidak bisa disimpan.
+  // Catatan: baris tgajimingguan ikut menyimpan gm_gapok/gm_hari/gm_jamlembur,
+  // jadi mengosongkan semua potongan untuk satu periode juga menghapus snapshot
+  // itu. Nilai attendance & lembur tetap dihitung ulang dari tabsensi, jadi
+  // laporan gaji tidak berubah.
 
   // Hapus data lama pada rentang periode & unit tersebut di tgajimingguan
   await db.query(

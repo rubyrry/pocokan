@@ -27,6 +27,16 @@ const hasFilledPotongan = computed(() =>
   items.value.some((item) => item.potongan !== null && item.potongan !== "")
 );
 
+// Samakan dulu "", null, dan angka supaya "0" vs 0 tidak dianggap berubah.
+const norm = (value: unknown) =>
+  value === null || value === undefined || value === "" ? "" : String(Number(value));
+
+const fingerprint = computed(() =>
+  items.value.map((item) => `${item.id}|${norm(item.potongan)}`).join("\n")
+);
+const savedFingerprint = ref("");
+const isDirty = computed(() => fingerprint.value !== savedFingerprint.value);
+
 onMounted(async () => {
   try {
     unitList.value = await unitApi.getAll();
@@ -64,6 +74,7 @@ const loadData = async () => {
   isLoading.value = true;
   try {
     items.value = await prosesGajiApi.getData(selectedUnit.value, periode1.value, periode2.value);
+    savedFingerprint.value = fingerprint.value;
     if (items.value.length === 0) {
       toast.info("Tidak ada data karyawan / absensi pada rentang periode ini.");
     }
@@ -79,15 +90,20 @@ const handleSave = async () => {
     toast.warning("Tidak ada data untuk disimpan.");
     return;
   }
-  if (!hasFilledPotongan.value) {
-    toast.warning("Isi potongan minimal satu karyawan sebelum menyimpan.");
-    return;
-  }
   if (items.value.some((item) =>
     item.potongan !== null && item.potongan !== "" &&
     (!Number.isFinite(Number(item.potongan)) || Number(item.potongan) < 0)
   )) {
     toast.warning("Potongan harus berupa angka nol atau lebih.");
+    return;
+  }
+
+  // Menyimpan tabel yang seluruhnya kosong berarti menghapus semua potongan
+  // periode ini, jadi pastikan admin memang sengaja mau begitu.
+  if (!hasFilledPotongan.value && !confirm(
+    "Tidak ada potongan yang terisi.\n\n" +
+    "Menyimpan akan mengosongkan seluruh data potongan pada periode dan unit ini. Lanjutkan?"
+  )) {
     return;
   }
 
@@ -99,7 +115,12 @@ const handleSave = async () => {
       periode2: periode2.value,
       items: items.value,
     });
-    toast.success("Proses gaji berhasil disimpan.");
+    savedFingerprint.value = fingerprint.value;
+    toast.success(
+      hasFilledPotongan.value
+        ? "Proses gaji berhasil disimpan."
+        : "Seluruh data potongan periode ini dikosongkan."
+    );
   } catch (e: any) {
     toast.error(e.response?.data?.message ?? "Gagal menyimpan proses gaji.");
   } finally {
@@ -188,7 +209,7 @@ const exportExcelData = () => {
         variant="flat"
         @click="handleSave"
         :loading="isSaving"
-        :disabled="!items.length || !hasFilledPotongan"
+        :disabled="!items.length || !isDirty"
       >
         <IconDeviceFloppy :size="16" class="mr-1" />
         Save
@@ -218,6 +239,7 @@ const exportExcelData = () => {
           step="any"
           inputmode="decimal"
           aria-label="Potongan"
+          title="Kosongkan untuk mengembalikan ke NULL."
         />
       </span>
     </template>
