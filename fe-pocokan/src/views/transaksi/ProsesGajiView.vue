@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, onActivated } from "vue";
+import { useRoute, onBeforeRouteLeave } from "vue-router";
 import { useToast } from "vue-toastification";
-import { IconCalculator, IconDeviceFloppy, IconDownload } from "@tabler/icons-vue";
+import { IconCalculator, IconDeviceFloppy, IconDownload, IconAlertTriangle } from "@tabler/icons-vue";
 
 import BaseBrowse from "@/components/BaseBrowse.vue";
+import { useTabsStore } from "@/stores/tabsStore";
 import { unitApi, type Unit } from "@/api/master/unitApi";
 import { prosesGajiApi, type ProsesGajiItem } from "@/api/transaksi/prosesGajiApi";
 import { exportToExcel } from "@/utils/exportExcel";
 
 const toast = useToast();
+const route = useRoute();
+const tabsStore = useTabsStore();
+const tabId = route.path;
 const MENU_ID = "10"; // Sesuai tmenu Gaji
 
 const getTodayFormatted = () => {
@@ -37,12 +42,59 @@ const fingerprint = computed(() =>
 const savedFingerprint = ref("");
 const isDirty = computed(() => fingerprint.value !== savedFingerprint.value);
 
+// Satu jawaban dipakai bersama bila navigasi/tutup tab dipicu bersamaan.
+const showDiscardDialog = ref(false);
+const discardMessage = ref("");
+let discardResolver: ((value: boolean) => void) | null = null;
+let discardPending: Promise<boolean> | null = null;
+const konfirmasiBuang = (message: string) => {
+  if (discardPending) return discardPending;
+  discardMessage.value = message;
+  showDiscardDialog.value = true;
+  discardPending = new Promise<boolean>((resolve) => { discardResolver = resolve; });
+  return discardPending;
+};
+const jawabDiscard = (ya: boolean) => {
+  showDiscardDialog.value = false;
+  const resolve = discardResolver;
+  discardResolver = null;
+  discardPending = null;
+  resolve?.(ya);
+};
+
+let closingOwnTab = false;
+tabsStore.setCloseGuard(tabId, async () => {
+  if (!isDirty.value) return true;
+  const bolehTutup = await konfirmasiBuang("Tutup tab ini? Perubahan potongan yang belum disimpan akan hilang.");
+  if (bolehTutup) closingOwnTab = true;
+  return bolehTutup;
+});
+onBeforeRouteLeave(() => {
+  if (closingOwnTab) {
+    closingOwnTab = false;
+    return true; // Penutupan tab sudah dikonfirmasi, jangan bertanya dua kali.
+  }
+  if (!isDirty.value) return true;
+  return konfirmasiBuang("Keluar dari halaman ini? Perubahan potongan yang belum disimpan akan hilang.");
+});
+// Guard tetap terdaftar selama instance tersimpan di KeepAlive.
+onActivated(() => { closingOwnTab = false; });
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (!isDirty.value) return;
+  e.preventDefault();
+  e.returnValue = "";
+};
+window.addEventListener("beforeunload", handleBeforeUnload);
+onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+  tabsStore.setCloseGuard(tabId, null);
+  jawabDiscard(false);
+});
+
 onMounted(async () => {
   try {
     unitList.value = await unitApi.getAll();
-    if (unitList.value.length > 0) {
-      selectedUnit.value = unitList.value[0].kode;
-    }
+    selectedUnit.value = "SEMUA";
   } catch (e) {
     toast.error("Gagal memuat daftar unit.");
   }
@@ -179,6 +231,7 @@ const exportExcelData = () => {
       <div class="filter-group">
         <span class="filter-lbl">Unit</span>
         <select v-model="selectedUnit" class="select-inp">
+          <option value="SEMUA">SEMUA</option>
           <option
             v-for="u in unitList"
             :key="u.kode"
@@ -192,6 +245,10 @@ const exportExcelData = () => {
 
     <!-- ── Aksi: Export & Save ── -->
     <template #extra-actions>
+      <v-chip v-if="isDirty" color="warning" size="small" variant="tonal">
+        <IconAlertTriangle :size="14" class="mr-1" />
+        Belum disimpan
+      </v-chip>
       <v-btn
         size="small"
         variant="tonal"
@@ -244,6 +301,20 @@ const exportExcelData = () => {
       </span>
     </template>
   </BaseBrowse>
+  <v-dialog v-model="showDiscardDialog" max-width="380" persistent>
+    <v-card rounded="lg">
+      <v-card-title class="text-subtitle-1 font-weight-bold pa-3 bg-amber-darken-4 text-white">
+        Perubahan Belum Disimpan
+      </v-card-title>
+      <v-card-text class="pa-4 text-body-2">{{ discardMessage }}</v-card-text>
+      <v-card-actions class="pa-2 bg-grey-lighten-4 justify-end">
+        <v-btn size="small" variant="outlined" @click="jawabDiscard(false)">Batal</v-btn>
+        <v-btn size="small" color="error" variant="flat" class="px-4" @click="jawabDiscard(true)">
+          Ya, Lanjutkan
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>

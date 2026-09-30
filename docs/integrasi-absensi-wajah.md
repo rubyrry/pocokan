@@ -56,6 +56,29 @@ Verifikasi:
 
 ## Endpoint Pocokan
 
+### Pilihan SEMUA pada Unit Absensi
+
+Filter Unit di `AbsensiView.vue` menyediakan `SEMUA — Semua Unit` selain unit
+individual. Nilai protokol `pabKode: "SEMUA"` berlaku untuk GET karyawan,
+Tarik Absensi, dan Save manual. Pilihan default tetap unit pertama seperti semula.
+
+- GET menampilkan karyawan aktif dari seluruh unit terdaftar, dengan kolom Unit
+  masing-masing dan nilai absensi pada tanggal terpilih.
+- Tarik memakai satu request dan satu named lock per tanggal. Summary merupakan
+  total seluruh unit; aktif/bukti hadir/validitas ID tetap diperiksa. Setiap INSERT
+  memakai `kar_pab_kode` asli. Tidak ada DELETE atau perubahan lembur dari Tarik.
+- Save mode SEMUA mengambil unit karyawan dari master sebelum penulisan, menolak
+  karyawan nonaktif/unit tidak valid sebelum DELETE, dan tidak mempercayai unit
+  kiriman browser. Penggantian baris hanya berlaku untuk ID dalam payload pada
+  tanggal terpilih, sehingga data nonaktif yang tidak ditampilkan tidak terhapus.
+  Nilai `SEMUA` tidak pernah ditulis sebagai `ab_pab_kode`.
+- Warning perubahan belum disimpan tetap berlaku saat beralih ke/dari SEMUA.
+
+Verifikasi tambahan: TEST 33 frontend (opsi, GET, satu request Tarik, refresh,
+Save lintas unit), serta dua test database untuk Tarik/idempotency/lembur dan
+GET/Save/unit master/perlindungan nonaktif/tanggal lain. Total terbaru: 25 test
+frontend dan 24 hasil test backend (termasuk test induk).
+
 `POST /api/transaksi/absensi/tarik-wajah`
 
 Middleware mengikuti Save Absensi: `verifyToken` dan `checkPermission(9, "insert")`.
@@ -322,6 +345,24 @@ Dua hal yang perlu diketahui:
   laporan gaji tidak berubah.
 
 ## Peringatan perubahan belum disimpan
+
+### Potongan pada halaman Proses Gaji
+
+`ProsesGajiView.vue` juga memakai fingerprint Potongan untuk warning menu/tab
+dan registry `setCloseGuard` yang sama untuk X, Tutup Tab, atau Tutup Semua Tab.
+Dialog bertuliskan "Perubahan Belum Disimpan" dan menyebut perubahan potongan
+yang akan hilang. Batal menjaga route, tab aktif, dan nilai manual; Ya melanjutkan
+tanpa menyimpan otomatis. Penanda `closingOwnTab` mencegah dialog kedua saat
+penutupan tab menyebabkan perpindahan route. Guard tetap hidup di KeepAlive
+dan dilepas saat unmount. Refresh/tutup browser memakai `beforeunload`.
+
+Chip "Belum disimpan" hilang setelah Save berhasil, tetapi tetap ada jika Save
+gagal. Data hasil muat tidak dianggap perubahan. Perhitungan gaji/backend tidak
+diubah untuk warning ini. Perlindungan pergantian filter periode/unit pada
+halaman Gaji tidak ditambahkan dalam permintaan ini.
+
+TEST 28–32 menguji menu/tab dengan Batal dan Ya, X tanpa dialog ganda, Save
+berhasil/gagal, halaman bersih, serta Tutup Semua Tab. Total frontend: 24 test.
 
 Tombol Save hanya berlaku untuk edit manual (kehadiran dan jam lembur); Tarik
 Absensi tidak menyimpan apa pun dari form. Isian manual baru masuk database

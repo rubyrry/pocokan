@@ -3,8 +3,10 @@ const db = require("../../config/database");
 // Nilai ab_hari (hari kerja) yang boleh diisi manual: 0 tidak hadir,
 // 0.5 setengah hari, 1 hadir. Penarikan wajah selalu menulis 1.
 const HADIR_VALUES = [0, 0.5, 1];
+const ALL_UNITS = "SEMUA";
 
 const getKaryawanByUnit = async (pabKode, tanggal) => {
+  const semua = pabKode === ALL_UNITS;
   // Ambil karyawan aktif di unit (pabrik) tersebut dengan JOIN ke tbagian untuk mendapatkan nama bagian (bag_nama)
   const [karyawan] = await db.query(
     `SELECT 
@@ -14,17 +16,17 @@ const getKaryawanByUnit = async (pabKode, tanggal) => {
        COALESCE(b.bag_nama, k.kar_bag_kode, '-') AS bagian 
      FROM tkaryawan k
      LEFT JOIN tbagian b ON b.bag_kode = k.kar_bag_kode
-     WHERE k.kar_pab_kode = ? AND k.kar_isaktif = 1 
+      WHERE ${semua ? "EXISTS (SELECT 1 FROM tpabrik p WHERE p.pab_kode = k.kar_pab_kode)" : "k.kar_pab_kode = ?"} AND k.kar_isaktif = 1
      ORDER BY k.kar_kode`,
-    [pabKode]
+    semua ? [] : [pabKode]
   );
 
   // Cek apakah sudah ada data absensi untuk tanggal & unit ini
   const [existing] = await db.query(
     `SELECT ab_kar_kode, ab_hari, ab_jamlembur 
      FROM tabsensi 
-     WHERE ab_pab_kode = ? AND ab_tanggal = ?`,
-    [pabKode, tanggal]
+      WHERE ${semua ? "" : "ab_pab_kode = ? AND "}ab_tanggal = ?`,
+    semua ? [tanggal] : [pabKode, tanggal]
   );
 
   const mapExisting = {};
@@ -73,10 +75,29 @@ const saveAbsensi = async (payload) => {
     throw new Error("Kehadiran hanya boleh diisi 0, 0.5, atau 1.");
   }
 
-  // Hapus dulu data absensi lama pada tanggal & unit tersebut (agar bersih / update re-save)
+  // SEMUA bukan kode unit database. Resolusi unit dari master dilakukan sebelum
+  // menghapus apa pun; jangan mempercayai kolom unit dari payload browser.
+  let unitMap;
+  if (pabKode === ALL_UNITS) {
+    const [karyawan] = await db.query(
+      `SELECT k.kar_kode, k.kar_pab_kode FROM tkaryawan k
+       JOIN tpabrik p ON p.pab_kode = k.kar_pab_kode
+       WHERE k.kar_isaktif = 1 AND k.kar_kode IN (?)`,
+      [items.map(item => item.id)]
+    );
+    unitMap = new Map(karyawan.map(k => [k.kar_kode, k.kar_pab_kode]));
+    if (items.some(item => !unitMap.has(item.id))) {
+      throw new Error("Terdapat karyawan tidak aktif atau unit tidak valid. Muat ulang absensi sebelum menyimpan.");
+    }
+  }
+
+  // Mode SEMUA hanya mengganti karyawan dalam payload, bukan menghapus seluruh
+  // tanggal termasuk data karyawan nonaktif yang tidak ditampilkan.
   await db.query(
-    `DELETE FROM tabsensi WHERE ab_pab_kode = ? AND ab_tanggal = ?`,
-    [pabKode, tanggal]
+    unitMap
+      ? `DELETE FROM tabsensi WHERE ab_tanggal = ? AND ab_kar_kode IN (?)`
+      : `DELETE FROM tabsensi WHERE ab_pab_kode = ? AND ab_tanggal = ?`,
+    unitMap ? [tanggal, items.map(item => item.id)] : [pabKode, tanggal]
   );
 
   // Insert ulang hanya baris dengan kehadiran atau jam lembur yang terisi
@@ -94,7 +115,7 @@ const saveAbsensi = async (payload) => {
     await db.query(
       `INSERT INTO tabsensi (ab_pab_kode, ab_tanggal, ab_kar_kode, ab_hari, ab_jamlembur) 
        VALUES (?, ?, ?, ?, ?)`,
-      [pabKode, tanggal, item.id, hari, jamlembur]
+      [unitMap ? unitMap.get(item.id) : pabKode, tanggal, item.id, hari, jamlembur]
     );
   }
 
@@ -102,6 +123,7 @@ const saveAbsensi = async (payload) => {
 };
 
 const tarikWajah = async ({ pabKode, tanggal } = {}) => {
+  const semua = pabKode === ALL_UNITS;
   const inputError = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
   if (typeof tanggal !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(tanggal) ||
       tanggal < "1000-01-01" || Number.isNaN(Date.parse(tanggal)) ||
@@ -119,8 +141,10 @@ const tarikWajah = async ({ pabKode, tanggal } = {}) => {
   // yang sama; primary key + upsert tetap melindungi penulisan dari duplikasi.
   const lockNameSql = "CONCAT('pocokan:wajah:', MD5(CONCAT(DATABASE(), ':', ?)))";
   try {
-    const [[unit]] = await conn.query("SELECT pab_kode FROM tpabrik WHERE pab_kode = ?", [pabKode]);
-    if (!unit) throw inputError("Unit tidak ditemukan.");
+    if (!semua) {
+      const [[unit]] = await conn.query("SELECT pab_kode FROM tpabrik WHERE pab_kode = ?", [pabKode]);
+      if (!unit) throw inputError("Unit tidak ditemukan.");
+    }
 
     const [[lock]] = await conn.query(`SELECT GET_LOCK(${lockNameSql}, 0) AS acquired`, [tanggal]);
     if (Number(lock.acquired) !== 1) {
@@ -133,18 +157,19 @@ const tarikWajah = async ({ pabKode, tanggal } = {}) => {
     const [[source]] = await conn.query(
       `SELECT COUNT(*) AS total FROM tabsensi_wajah w
        LEFT JOIN tkaryawan k ON k.kar_kode = w.karyawan_id
-       WHERE w.tanggal = ? AND (k.kar_pab_kode = ? OR k.kar_kode IS NULL)`,
-      [tanggal, unit.pab_kode]
+        WHERE w.tanggal = ? ${semua ? "" : "AND (k.kar_pab_kode = ? OR k.kar_kode IS NULL)"}`,
+       semua ? [tanggal] : [tanggal, pabKode]
     );
     const [karyawan] = await conn.query(
       `SELECT DISTINCT k.kar_kode, k.kar_pab_kode, a.ab_kar_kode AS existing
        FROM tabsensi_wajah w
        JOIN tkaryawan k ON k.kar_kode = w.karyawan_id
        LEFT JOIN tabsensi a ON a.ab_kar_kode = k.kar_kode AND a.ab_tanggal = w.tanggal
-       WHERE w.tanggal = ? AND k.kar_isaktif = 1 AND k.kar_pab_kode = ?
+        WHERE w.tanggal = ? AND k.kar_isaktif = 1
+          AND ${semua ? "EXISTS (SELECT 1 FROM tpabrik p WHERE p.pab_kode = k.kar_pab_kode)" : "k.kar_pab_kode = ?"}
          AND w.status = 'Hadir' AND w.jam_masuk IS NOT NULL
          AND w.foto_masuk IS NOT NULL AND TRIM(w.foto_masuk) <> ''`,
-      [tanggal, unit.pab_kode]
+       semua ? [tanggal] : [tanggal, pabKode]
     );
     summary.ditemukan = karyawan.length;
     summary.skipped = Math.max(0, Number(source.total) - karyawan.length);
@@ -172,7 +197,7 @@ const tarikWajah = async ({ pabKode, tanggal } = {}) => {
                AND w.foto_masuk IS NOT NULL AND TRIM(w.foto_masuk) <> ''
            )
          ON DUPLICATE KEY UPDATE ab_hari = 1`,
-        [tanggal, k.kar_kode, unit.pab_kode, tanggal]
+         [tanggal, k.kar_kode, k.kar_pab_kode, tanggal]
       );
       // Pool mysql2 existing memakai FOUND_ROWS: row yang sudah hadir tetap
       // dilaporkan matched (1), sedangkan SELECT tanpa kandidat menghasilkan 0.

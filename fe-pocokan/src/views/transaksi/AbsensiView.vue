@@ -151,9 +151,7 @@ onBeforeUnmount(() => {
 onMounted(async () => {
   try {
     unitList.value = await unitApi.getAll();
-    if (unitList.value.length > 0) {
-      selectedUnit.value = unitList.value[0].kode;
-    }
+    selectedUnit.value = "SEMUA";
   } catch (e) {
     toast.error("Gagal memuat daftar unit.");
   }
@@ -353,6 +351,7 @@ const exportExcelData = () => {
       <div class="filter-group">
         <span class="filter-lbl">Unit</span>
         <select v-model="selectedUnit" class="select-inp" :disabled="isPulling">
+          <option value="SEMUA">SEMUA</option>
           <option
             v-for="u in unitList"
             :key="u.kode"

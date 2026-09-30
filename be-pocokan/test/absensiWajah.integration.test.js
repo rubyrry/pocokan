@@ -29,7 +29,7 @@ test("Integrasi Tarik Absensi dengan SQL MariaDB/MyISAM", {
   // Salin DDL hasil audit sebagai tabel TEMPORARY dengan tipe/collation/PK/
   // engine yang sama. MariaDB menolak CREATE TEMPORARY t LIKE t (nama sama).
   // Jangan pernah mengganti TEMPORARY dengan CREATE TABLE biasa.
-  for (const table of ["tkaryawan", "tpabrik", "tabsensi_wajah", "tabsensi", "tgajimingguan"]) {
+  for (const table of ["tkaryawan", "tpabrik", "tabsensi_wajah", "tabsensi", "tgajimingguan", "tbagian"]) {
     const [[schema]] = await conn.query(`SHOW CREATE TABLE ${table}`);
     assert.match(schema["Create Table"], /^CREATE TABLE /);
     await conn.query(schema["Create Table"].replace(/^CREATE TABLE /, "CREATE TEMPORARY TABLE "));
@@ -67,7 +67,7 @@ test("Integrasi Tarik Absensi dengan SQL MariaDB/MyISAM", {
     conn.query("INSERT INTO tabsensi_wajah (karyawan_id,tanggal,status,jam_masuk,foto_masuk) VALUES (?,?,?,?,?)", [id, date, status, jam, foto]);
   const reset = async () => {
     queryHook = null;
-    for (const table of ["tabsensi", "tabsensi_wajah", "tkaryawan", "tpabrik", "tgajimingguan"]) {
+    for (const table of ["tabsensi", "tabsensi_wajah", "tkaryawan", "tpabrik", "tgajimingguan", "tbagian"]) {
       await conn.query(`DELETE FROM ${table}`); // Hanya fixture TEMPORARY.
     }
     await conn.query("INSERT INTO tpabrik (pab_kode,pab_nama) VALUES ('U1','Unit Test 1'),('U2','Unit Test 2')");
@@ -78,6 +78,51 @@ test("Integrasi Tarik Absensi dengan SQL MariaDB/MyISAM", {
              ('N1','Nonaktif',0,'U1','foto-lama','[0.3]'),
              ('B1','Unit Lain',1,'U2','foto-unit-lain','[0.4]')`);
   };
+
+  await t.test("SEMUA: satu tarikan lintas unit, aktif saja, idempotent, lembur tetap utuh", async () => {
+    await reset();
+    await face("A1"); await face("B1"); await face("N1"); await face("ORPHAN");
+    await conn.query("INSERT INTO tabsensi (ab_kar_kode,ab_tanggal,ab_pab_kode,ab_hari,ab_jamlembur) VALUES ('B1',?,'U2',0.5,3)", [tanggal]);
+    const result = await service.tarikWajah({ tanggal, pabKode: "SEMUA" });
+    assert.deepEqual(normal(result), { ditemukan: 2, inserted: 1, updated: 1, skipped: 2 });
+    assert.deepEqual((await target()).map(r => [r.ab_kar_kode, r.ab_pab_kode, r.ab_hari, r.ab_jamlembur]),
+      [["A1", "U1", 1, null], ["B1", "U2", 1, 3]]);
+    await service.tarikWajah({ tanggal, pabKode: "SEMUA" });
+    assert.equal((await target()).length, 2);
+    const items = await service.getKaryawanByUnit("SEMUA", tanggal);
+    assert.deepEqual(items.map(i => [i.id, i.unit]), [["A1", "U1"], ["A2", "U1"], ["B1", "U2"]]);
+    assert.equal(items.find(i => i.id === "B1").jamlembur, 3);
+  });
+
+  await t.test("SEMUA: Save memakai unit master, bukan SEMUA/payload, dan menjaga nonaktif/tanggal lain", async () => {
+    await reset();
+    await conn.query("INSERT INTO tabsensi (ab_kar_kode,ab_tanggal,ab_pab_kode,ab_hari) VALUES ('N1',?,'U1',1),('A1','2026-09-24','U1',1)", [tanggal]);
+    await service.saveAbsensi({ pabKode: "SEMUA", tanggal, items: [
+      { id: "A1", kehadiran: 0.5, jamlembur: 3 },
+      { id: "B1", kehadiran: 1, jamlembur: 2 },
+    ] });
+    await service.saveAbsensi({ pabKode: "SEMUA", tanggal, items: [
+      { id: "A1", unit: "SALAH", kehadiran: 0.5, jamlembur: null },
+      { id: "B1", unit: "SEMUA", kehadiran: null, jamlembur: 2 },
+    ] });
+    const [rows] = await conn.query("SELECT ab_kar_kode,ab_pab_kode,ab_hari,ab_jamlembur FROM tabsensi WHERE ab_tanggal=? ORDER BY ab_kar_kode", [tanggal]);
+    assert.deepEqual(rows.map(r => [r.ab_kar_kode, r.ab_pab_kode, r.ab_hari, r.ab_jamlembur]),
+      [["A1", "U1", 0.5, null], ["B1", "U2", null, 2], ["N1", "U1", 1, null]]);
+    const reloaded = await service.getKaryawanByUnit("SEMUA", tanggal);
+    assert.equal(reloaded.find(i => i.id === "A1").jamlembur, null);
+    assert.equal(reloaded.find(i => i.id === "B1").kehadiran, null);
+    await assert.rejects(service.saveAbsensi({ pabKode: "SEMUA", tanggal, items: [{ id: "N1", kehadiran: 1 }] }), /tidak aktif/);
+    assert.equal((await target()).length, 4, "validasi sebelum DELETE");
+    await service.saveAbsensi({ pabKode: "SEMUA", tanggal, items: [
+      { id: "A1", kehadiran: null, jamlembur: null }, { id: "B1", kehadiran: "", jamlembur: "" },
+    ] });
+    assert.equal((await target()).length, 2, "nonaktif dan tanggal lain tidak dihapus");
+    const cleared = await service.getKaryawanByUnit("SEMUA", tanggal);
+    for (const id of ["A1", "B1"]) {
+      assert.equal(cleared.find(i => i.id === id).kehadiran, null);
+      assert.equal(cleared.find(i => i.id === id).jamlembur, null);
+    }
+  });
 
   await t.test("TEST 1 dan 5: aktif dengan bukti hadir diinsert, kehadiran 1 lembur kosong", async () => {
     await reset(); await face("A1");
@@ -273,6 +318,26 @@ test("Integrasi Tarik Absensi dengan SQL MariaDB/MyISAM", {
     const [row] = await target();
     assert.equal(row.ab_jamlembur, 1, "lembur yang tidak disentuh harus utuh");
   });
+  await t.test("Gaji SEMUA: muat lintas unit, Save unit master, kosongkan kembali, validasi sebelum DELETE", async () => {
+    await reset();
+    const payload = { pabKode: "SEMUA", periode1: tanggal, periode2: tanggal, items: [
+      { id: "A1", unit: "SALAH", potongan: 1000 },
+      { id: "B1", unit: "SEMUA", potongan: 2000 },
+    ] };
+    await gajiService.saveProsesGaji(payload);
+    assert.deepEqual((await gaji()).map(r => [r.gm_kar_nik, r.gm_pab_kode, r.gm_potongan]),
+      [["A1", "U1", 1000], ["B1", "U2", 2000]]);
+    const loaded = await gajiService.getProsesGaji("SEMUA", tanggal, tanggal);
+    assert.deepEqual(loaded.map(i => [i.id, i.unit, i.potongan]),
+      [["A1", "U1", 1000], ["A2", "U1", null], ["B1", "U2", 2000]]);
+    assert.deepEqual((await gajiService.getProsesGaji("U2", tanggal, tanggal)).map(i => i.id), ["B1"]);
+    await assert.rejects(gajiService.saveProsesGaji({ ...payload, items: [{ id: "N1", potongan: 100 }] }), /tidak aktif/);
+    assert.equal((await gaji()).length, 2);
+    await gajiService.saveProsesGaji({ ...payload, items: [{ id: "A1", potongan: "" }, { id: "B1", potongan: null }] });
+    assert.deepEqual(await gaji(), []);
+    assert.ok((await gajiService.getProsesGaji("SEMUA", tanggal, tanggal)).every(i => i.potongan === null));
+  });
+
   await t.test("Save proses gaji: mengosongkan semua potongan menghapus data lama", async () => {
     await reset();
     const periode = { pabKode: "U1", periode1: tanggal, periode2: tanggal };

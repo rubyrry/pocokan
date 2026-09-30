@@ -1,6 +1,7 @@
 const db = require("../../config/database");
 
 const getProsesGaji = async (pabKode, periode1, periode2) => {
+  const semua = pabKode === "SEMUA";
   // Ambil karyawan aktif di unit tersebut beserta gapok
   const [karyawan] = await db.query(
     `SELECT 
@@ -11,9 +12,9 @@ const getProsesGaji = async (pabKode, periode1, periode2) => {
        COALESCE(k.kar_gapok, 0) AS gapok
      FROM tkaryawan k
      LEFT JOIN tbagian b ON b.bag_kode = k.kar_bag_kode
-     WHERE k.kar_pab_kode = ? AND k.kar_isaktif = 1 
+      WHERE ${semua ? "EXISTS (SELECT 1 FROM tpabrik p WHERE p.pab_kode = k.kar_pab_kode)" : "k.kar_pab_kode = ?"} AND k.kar_isaktif = 1
      ORDER BY k.kar_kode`,
-    [pabKode]
+    semua ? [] : [pabKode]
   );
 
   // Ambil total kehadiran (SUM ab_hari) dan rincian lembur dalam rentang periode1 s/d periode2 dari tabsensi
@@ -26,8 +27,8 @@ const getProsesGaji = async (pabKode, periode1, periode2) => {
        ab_hari,
        ab_jamlembur
      FROM tabsensi
-     WHERE ab_pab_kode = ? AND ab_tanggal BETWEEN ? AND ?`,
-    [pabKode, periode1, periode2]
+      WHERE ${semua ? "" : "ab_pab_kode = ? AND "}ab_tanggal BETWEEN ? AND ?`,
+    semua ? [periode1, periode2] : [pabKode, periode1, periode2]
   );
 
   const summaryMap = {};
@@ -51,8 +52,8 @@ const getProsesGaji = async (pabKode, periode1, periode2) => {
        gm_kar_nik AS kar_kode,
        COALESCE(gm_potongan, 0) AS potongan
      FROM tgajimingguan
-     WHERE gm_pab_kode = ? AND gm_periode = ? AND gm_periode2 = ?`,
-    [pabKode, periode1, periode2]
+      WHERE ${semua ? "" : "gm_pab_kode = ? AND "}gm_periode = ? AND gm_periode2 = ?`,
+    semua ? [periode1, periode2] : [pabKode, periode1, periode2]
   );
 
   const potonganMap = Object.fromEntries(
@@ -109,10 +110,27 @@ const saveProsesGaji = async (payload) => {
   // itu. Nilai attendance & lembur tetap dihitung ulang dari tabsensi, jadi
   // laporan gaji tidak berubah.
 
-  // Hapus data lama pada rentang periode & unit tersebut di tgajimingguan
+  // Resolusi unit asli sebelum DELETE; SEMUA bukan kode unit database.
+  let unitMap;
+  if (pabKode === "SEMUA") {
+    const [karyawan] = await db.query(
+      `SELECT k.kar_kode, k.kar_pab_kode FROM tkaryawan k
+       JOIN tpabrik p ON p.pab_kode = k.kar_pab_kode
+       WHERE k.kar_isaktif = 1 AND k.kar_kode IN (?)`,
+      [items.map(item => item.id)]
+    );
+    unitMap = new Map(karyawan.map(k => [k.kar_kode, k.kar_pab_kode]));
+    if (items.some(item => !unitMap.has(item.id))) {
+      throw new Error("Terdapat karyawan tidak aktif atau unit tidak valid. Muat ulang gaji sebelum menyimpan.");
+    }
+  }
+
+  // SEMUA hanya mengganti karyawan yang ditampilkan, menjaga data nonaktif.
   await db.query(
-    `DELETE FROM tgajimingguan WHERE gm_pab_kode = ? AND gm_periode = ? AND gm_periode2 = ?`,
-    [pabKode, periode1, periode2]
+    unitMap
+      ? `DELETE FROM tgajimingguan WHERE gm_periode = ? AND gm_periode2 = ? AND gm_kar_nik IN (?)`
+      : `DELETE FROM tgajimingguan WHERE gm_pab_kode = ? AND gm_periode = ? AND gm_periode2 = ?`,
+    unitMap ? [periode1, periode2, items.map(item => item.id)] : [pabKode, periode1, periode2]
   );
 
   // Insert ulang hanya item dengan potongan terisi ke tgajimingguan
@@ -122,7 +140,7 @@ const saveProsesGaji = async (payload) => {
        (gm_pab_kode, gm_periode, gm_periode2, gm_kar_nik, gm_gapok, gm_hari, gm_jamlembur, gm_jamlembur2, gm_potongan)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        pabKode,
+        unitMap ? unitMap.get(item.id) : pabKode,
         periode1,
         periode2,
         item.id,

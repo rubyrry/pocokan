@@ -189,11 +189,13 @@ const compileAbsensiView = ({ absensiApi, feedback, captured, tabsStore, konfirm
   }, "test-absensi", { confirm: konfirmasi.fn });
 
 // ProsesGajiView asli: dipakai TEST 27 (potongan bisa dikosongkan kembali).
-const compileGajiView = ({ prosesGajiApi, feedback, captured, konfirmasi }) =>
+const compileGajiView = ({ prosesGajiApi, feedback, captured, konfirmasi, tabsStore }) =>
   compileSfc("../src/views/transaksi/ProsesGajiView.vue", {
     vue,
+    "vue-router": vueRouter,
+    [TABS_STORE]: { useTabsStore: () => tabsStore },
     "vue-toastification": { useToast: () => Object.fromEntries(["info", "success", "warning", "error"].map(level => [level, text => feedback.push({ level, text })])) },
-    "@tabler/icons-vue": Object.fromEntries(["IconCalculator", "IconDeviceFloppy", "IconDownload"].map(name => [name, () => vue.h("svg")])),
+    "@tabler/icons-vue": Object.fromEntries(["IconCalculator", "IconDeviceFloppy", "IconDownload", "IconAlertTriangle"].map(name => [name, () => vue.h("svg")])),
     "@/components/BaseBrowse.vue": { default: browseStub(captured, ["potongan"]) },
     "@/api/master/unitApi": { unitApi: { getAll: async () => [{ kode: "U1", nama: "Unit 1" }] } },
     "@/api/transaksi/prosesGajiApi": { prosesGajiApi },
@@ -314,8 +316,7 @@ const mountAbsensi = async ({ absensiApi, extraTabs = [], menuRoutes = [], realT
   return { ...env, store, router, calls, feedback, captured, clearedSessions, konfirmasi, api };
 };
 
-// Runner untuk halaman Proses Gaji (kolom Potongan). Tanpa router/tabsStore
-// karena halaman itu memang tidak punya close guard.
+// Router dan store asli untuk menguji warning Potongan di menu/tab/X.
 const mountGaji = async ({ prosesGajiApi } = {}) => {
   const calls = []; const feedback = []; const captured = {};
   const konfirmasi = buatKonfirmasi();
@@ -329,9 +330,28 @@ const mountGaji = async ({ prosesGajiApi } = {}) => {
     },
     save: async (payload) => { calls.push({ kind: "save", ...payload }); return { success: true, message: "ok" }; },
   };
-  const view = compileGajiView({ prosesGajiApi: api, feedback, captured, konfirmasi });
-  const env = mountView({ render: () => vue.h(view) });
-  return { ...env, calls, feedback, captured, konfirmasi, api };
+  const { useTabsStore, clearedSessions } = muatTabsStore();
+  const store = useTabsStore();
+  const view = compileGajiView({ prosesGajiApi: api, feedback, captured, konfirmasi, tabsStore: store });
+  store.openTab({ title: "Dashboard", path: "/", closable: false });
+  store.openTab({ title: "Gaji", path: GAJI_PATH, closable: true });
+  const router = vueRouter.createRouter({
+    history: vueRouter.createMemoryHistory(),
+    routes: [
+      { path: "/", component: { render: () => vue.h("p", "dashboard") } },
+      { path: GAJI_PATH, component: view },
+      { path: "/menu-test", component: { render: () => vue.h("p", "menu") } },
+    ],
+  });
+  router.afterEach((to, _from, failure) => {
+    if (failure) return;
+    store.openTab({ title: to.path, path: to.path, closable: to.path !== "/" });
+  });
+  await router.push(GAJI_PATH);
+  await router.isReady();
+  const tabView = compileTabView(store);
+  const env = mountView({ render: () => vue.h("div", [vue.h(tabBarStub(store)), vue.h(tabView)]) }, { plugins: [router] });
+  return { ...env, calls, feedback, captured, konfirmasi, api, store, router, clearedSessions };
 };
 
 const absensiTab = (store) => store.tabs.find(t => t.id === ABSENSI_PATH);
@@ -362,13 +382,14 @@ test("TEST 10: klik Tarik memakai filter aktif, loading mencegah submit ganda, l
     assert.ok(pullButton);
     assert.equal(all().find(el => el.type === "input" && el.props.max === "1").modelValue, 0);
     const selectedDate = calls[0].tanggal;
+    assert.equal(calls[0].unit, "SEMUA", "halaman awal memuat seluruh unit");
     const firstClick = pullButton.props.onClick();
     await vue.nextTick();
     assert.equal(pullButton.props.disabled, true);
     assert.match(text(pullButton), /Menarik absensi/);
     await pullButton.props.onClick();
     assert.equal(calls.filter(c => c.kind === "pull").length, 1);
-    assert.equal(calls.find(c => c.kind === "pull").pabKode, "U1");
+    assert.equal(calls.find(c => c.kind === "pull").pabKode, "SEMUA");
     assert.equal(calls.find(c => c.kind === "pull").tanggal, selectedDate);
     completePull({ success: true, message: "Tarik absensi berhasil. 1 karyawan ditandai hadir.", data: { ditemukan: 1, inserted: 0, updated: 1, skipped: 0 } });
     await firstClick; await flush();
@@ -950,4 +971,170 @@ test("TEST 27: mengosongkan semua potongan bisa disimpan setelah konfirmasi", as
   } finally {
     unmount();
   }
+});
+
+test("TEST 28: potongan dirty menahan menu/tab; Batal menjaga isian dan tidak membuat tab hantu", async () => {
+  const env = await mountGaji();
+  try {
+    await env.flush();
+    assert.equal(env.all().find(el => el.type === "v-chip"), undefined);
+    env.captured.items[0].potongan = 15000;
+    await env.flush();
+    assert.ok(env.all().find(el => el.type === "v-chip"));
+    const nav = env.router.push("/menu-test");
+    await env.flush();
+    assert.match(env.text(env.dialog()), /Perubahan potongan yang belum disimpan/);
+    env.button("Batal")[0].props.onClick();
+    await nav; await env.flush();
+    assert.equal(env.router.currentRoute.value.path, GAJI_PATH);
+    assert.equal(env.store.tabs.some(t => t.path === "/menu-test"), false);
+    assert.equal(env.captured.items[0].potongan, 15000);
+
+    env.store.setActiveTab("/");
+    await env.flush();
+    env.button("Batal")[0].props.onClick();
+    await env.flush(); await env.flush();
+    assert.equal(env.store.activeTabId, GAJI_PATH);
+    assert.equal(env.router.currentRoute.value.path, GAJI_PATH);
+    assert.equal(env.captured.items[0].potongan, 15000);
+    assert.equal(env.dialogOpens.length, 2);
+
+    const lanjut = env.router.push("/menu-test");
+    await env.flush();
+    env.button("Ya, Lanjutkan")[0].props.onClick();
+    await lanjut; await env.flush();
+    assert.equal(env.router.currentRoute.value.path, "/menu-test");
+    assert.equal(env.calls.filter(c => c.kind === "save").length, 0);
+  } finally { env.unmount(); }
+});
+
+test("TEST 29: X Gaji meminta warning sekali; Batal tetap terbuka, Ya menutup tanpa dialog kedua", async () => {
+  const env = await mountGaji();
+  try {
+    await env.flush();
+    env.captured.items[0].potongan = 1000;
+    await env.flush();
+    env.tabClose(GAJI_PATH).props.onClick();
+    await env.flush();
+    assert.match(env.text(env.dialog()), /Tutup tab ini\? Perubahan potongan/);
+    env.button("Batal")[0].props.onClick();
+    await env.flush();
+    assert.ok(env.store.tabs.some(t => t.id === GAJI_PATH));
+    assert.equal(env.captured.items[0].potongan, 1000);
+    assert.deepEqual(env.clearedSessions, []);
+    env.tabClose(GAJI_PATH).props.onClick();
+    await env.flush();
+    env.button("Ya, Lanjutkan")[0].props.onClick();
+    await env.flush(); await env.flush();
+    assert.equal(env.store.tabs.some(t => t.id === GAJI_PATH), false);
+    assert.equal(env.router.currentRoute.value.path, "/");
+    assert.equal(env.dialogOpens.length, 2, "satu dialog per percobaan tutup");
+  } finally { env.unmount(); }
+});
+
+test("TEST 30: Save potongan menghapus warning; tab bersih langsung ditutup", async () => {
+  const env = await mountGaji();
+  try {
+    await env.flush();
+    env.captured.items[0].potongan = 0;
+    await env.flush();
+    await env.button("Save")[0].props.onClick();
+    await env.flush();
+    assert.equal(env.all().find(el => el.type === "v-chip"), undefined);
+    env.tabClose(GAJI_PATH).props.onClick();
+    await env.flush(); await env.flush();
+    assert.equal(env.store.tabs.some(t => t.id === GAJI_PATH), false);
+    assert.equal(env.dialogOpens.length, 0);
+  } finally { env.unmount(); }
+});
+
+test("TEST 31: Tutup Semua Tab juga melindungi potongan belum tersimpan", async () => {
+  const env = await mountGaji();
+  try {
+    await env.flush();
+    env.captured.items[0].potongan = 100;
+    await env.flush();
+    env.action("all").props.onClick();
+    await env.flush();
+    env.button("Batal")[0].props.onClick();
+    await env.flush();
+    assert.ok(env.store.tabs.some(t => t.id === GAJI_PATH));
+    assert.equal(env.captured.items[0].potongan, 100);
+  } finally { env.unmount(); }
+});
+
+test("TEST 33: filter SEMUA memuat semua unit dan mengirim satu request Tarik Absensi", async () => {
+  const calls = [];
+  const env = await mountAbsensi({ absensiApi: {
+    getKaryawan: async (unit, tanggal) => {
+      calls.push({ kind: "get", unit, tanggal });
+      return unit === "SEMUA" ? [
+        { id: "A1", unit: "U1", kehadiran: 1, jamlembur: null },
+        { id: "B1", unit: "U2", kehadiran: 1, jamlembur: 2 },
+      ] : [{ id: "A1", unit, kehadiran: 1, jamlembur: null }];
+    },
+    tarikWajah: async payload => {
+      calls.push({ kind: "pull", ...payload });
+      return { success: true, message: "ok", data: { ditemukan: 2, inserted: 1, updated: 1, skipped: 0 } };
+    },
+    save: async payload => { calls.push({ kind: "save", ...payload }); },
+  } });
+  try {
+    await env.flush();
+    assert.ok(env.all().find(el => el.type === "option" && el.props.value === "SEMUA"));
+    env.all().find(el => el.type === "select").onchange({ target: { value: "SEMUA" } });
+    await env.flush();
+    assert.equal(calls.at(-1).unit, "SEMUA");
+    assert.equal(env.captured.items.length, 2);
+    await env.button("Tarik Absensi")[0].props.onClick();
+    await env.flush();
+    const pulls = calls.filter(c => c.kind === "pull");
+    assert.equal(pulls.length, 1);
+    assert.equal(pulls[0].pabKode, "SEMUA");
+    assert.equal(calls.at(-1).kind, "get");
+    assert.equal(calls.at(-1).unit, "SEMUA");
+    env.captured.items[1].jamlembur = 3;
+    await env.flush();
+    await env.button("Save")[0].props.onClick();
+    assert.equal(calls.at(-1).pabKode, "SEMUA");
+    assert.equal(calls.at(-1).items[1].unit, "U2");
+  } finally { env.unmount(); }
+});
+
+test("Gaji: opsi SEMUA menjadi default dan Save mengirim SEMUA", async () => {
+  const env = await mountGaji();
+  try {
+    await env.flush();
+    const option = env.all().find(el => el.type === "option" && el.props.value === "SEMUA");
+    assert.ok(option);
+    assert.equal(env.text(option), "SEMUA");
+    assert.equal(env.calls.find(c => c.kind === "get").unit, "SEMUA");
+    env.captured.items[0].potongan = 1000;
+    await env.flush();
+    await env.button("Save")[0].props.onClick();
+    assert.equal(env.calls.find(c => c.kind === "save").pabKode, "SEMUA");
+  } finally { env.unmount(); }
+});
+
+test("TEST 32: data Gaji hasil muat tidak memicu warning, Save gagal tetap dirty", async () => {
+  const env = await mountGaji();
+  try {
+    await env.flush();
+    await env.router.push("/");
+    await env.router.push(GAJI_PATH);
+    await env.flush();
+    assert.equal(env.dialogOpens.length, 0);
+    env.captured.items[0].potongan = 100;
+    env.api.save = async () => { throw new Error("fixture gagal"); };
+    await env.flush();
+    await env.button("Save")[0].props.onClick();
+    await env.flush();
+    assert.ok(env.all().find(el => el.type === "v-chip"));
+    env.tabClose(GAJI_PATH).props.onClick();
+    await env.flush();
+    assert.equal(env.dialog().props.modelValue, true);
+    env.button("Batal")[0].props.onClick();
+    await env.flush();
+    assert.equal(env.captured.items[0].potongan, 100);
+  } finally { env.unmount(); }
 });
