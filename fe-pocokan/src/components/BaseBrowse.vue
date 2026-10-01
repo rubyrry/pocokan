@@ -149,6 +149,7 @@ const saved = loadState();
 const search = ref<string>(saved?.search ?? "");
 const currentPage = ref<number>(saved?.currentPage ?? 1);
 const perPage = ref<number>(saved?.perPage ?? props.itemsPerPage);
+const sortBy = ref<{ key: string; order?: "asc" | "desc" | boolean }[]>([]);
 const deleteDialog = ref(false);
 const pendingDeleteItem = ref<any>(null);
 
@@ -372,7 +373,7 @@ const matchColumnFilter = (val: any, filter: ColumnFilterValue): boolean => {
   return true;
 };
 
-// ── Filtered & Paged items ───────────────────────────────────────────────
+// Filter here; VDataTable sorts the full result before its own pagination.
 const filteredItems = computed(() => {
   let result = props.items;
   if (search.value) {
@@ -529,12 +530,6 @@ const pageStart = computed(() =>
 const pageEnd = computed(() =>
   Math.min(currentPage.value * perPage.value, totalItems.value),
 );
-const pagedItems = computed(() =>
-  filteredItems.value.slice(
-    (currentPage.value - 1) * perPage.value,
-    currentPage.value * perPage.value,
-  ),
-);
 const visiblePages = computed(() => {
   const total = totalPages.value,
     cur = currentPage.value;
@@ -554,19 +549,30 @@ const onJumpPage = () => {
     jumpPageInput.value = null;
   }
 };
-const onSearch = (val: string) => {
-  search.value = val;
+const onSearch = (val: string | null) => {
+  search.value = val ?? "";
   currentPage.value = 1;
 };
 
-// Inject tfoot whenever data changes or table re-renders
 watch(
-  () => [pagedItems.value.length, hasSummaryRow.value, props.summaryColumns, props.items],
-  () => injectTfoot(),
+  [search, columnFilters, sortBy, perPage],
+  () => {
+    currentPage.value = 1;
+  },
   { deep: true },
 );
+
+// Inject tfoot whenever data changes or table re-renders
 watch(
-  () => pagedItems.value,
+  () => [
+    filteredItems.value,
+    currentPage.value,
+    perPage.value,
+    sortBy.value,
+    hasSummaryRow.value,
+    props.summaryColumns,
+    props.items,
+  ],
   () => injectTfoot(),
   { deep: true },
 );
@@ -743,8 +749,10 @@ watch(
         >
           <v-data-table
             v-model="internalSelected"
+            v-model:page="currentPage"
+            v-model:sort-by="sortBy"
             :headers="finalHeaders"
-            :items="pagedItems"
+            :items="filteredItems"
             :loading="isLoading"
             :item-value="itemValue"
             :select-strategy="selectStrategy"
@@ -762,7 +770,7 @@ watch(
             sort-desc-icon=""
             :cell-props="({ value }) => ({ title: value ?? '' })"
           >
-            <template #headers="{ columns, isSorted, getSortIcon, toggleSort }">
+            <template #headers="{ columns, isSorted, toggleSort }">
               <tr>
                 <template
                   v-for="col in columns"
@@ -781,15 +789,18 @@ watch(
                         {{ col.title }}
                         <IconChevronUp
                           v-if="
-                            isSorted(col) && getSortIcon(col) === '$sortAsc'
+                            isSorted(col) &&
+                            sortBy.find((sort) => sort.key === col.key)?.order === 'asc'
                           "
-                          :size="10"
-                          style="display: inline; vertical-align: middle"
+                          :size="12"
+                          :stroke-width="2.2"
+                          class="sort-icon"
                         />
                         <IconChevronDown
                           v-else-if="isSorted(col)"
-                          :size="10"
-                          style="display: inline; vertical-align: middle"
+                          :size="12"
+                          :stroke-width="2.2"
+                          class="sort-icon"
                         />
                       </span>
                       <button
@@ -1321,6 +1332,12 @@ watch(
 }
 .th-title.sortable {
   cursor: pointer;
+}
+.sort-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 2px;
+  flex-shrink: 0;
 }
 .col-filter-btn {
   flex-shrink: 0;
