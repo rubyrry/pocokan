@@ -311,6 +311,10 @@ const exportExcelData = () => {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
+  if (isDirty.value) {
+    toast.warning("Ada perubahan kehadiran atau jam lembur yang belum disimpan. Klik Save terlebih dahulu sebelum Export.");
+    return;
+  }
   exportToExcel({
     title: `Export Data Absensi - ${tanggal.value}`,
     filenamePrefix: `absensi-${selectedUnit.value}-${tanggal.value}`,

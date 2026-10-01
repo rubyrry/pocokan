@@ -185,6 +185,10 @@ const exportExcelData = () => {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
+  if (isDirty.value) {
+    toast.warning("Ada perubahan potongan yang belum disimpan. Klik Save terlebih dahulu sebelum Export.");
+    return;
+  }
   exportToExcel({
     title: `Export Proses Gaji - ${periode1.value} s/d ${periode2.value}`,
     filenamePrefix: `proses-gaji-${selectedUnit.value}-${periode1.value}`,
