@@ -314,7 +314,7 @@ const exportExcelData = () => {
       <v-card-actions class="pa-2 bg-grey-lighten-4 justify-end">
         <v-btn size="small" variant="outlined" @click="jawabDiscard(false)">Batal</v-btn>
         <v-btn size="small" color="error" variant="flat" class="px-4" @click="jawabDiscard(true)">
-          Ya, Lanjutkan
+          Ya, keluar tanpa simpan
         </v-btn>
       </v-card-actions>
     </v-card>
