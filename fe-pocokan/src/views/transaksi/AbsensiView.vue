@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, onActivated } from "vue";
 import { useRoute, onBeforeRouteLeave } from "vue-router";
 import { useToast } from "vue-toastification";
-import { IconClock, IconDeviceFloppy, IconDownload, IconAlertTriangle } from "@tabler/icons-vue";
+import { IconClock, IconDeviceFloppy, IconDownload, IconAlertTriangle, IconAlertCircle } from "@tabler/icons-vue";
 
 import BaseBrowse from "@/components/BaseBrowse.vue";
 import { useTabsStore } from "@/stores/tabsStore";
@@ -451,15 +451,20 @@ const exportExcelData = () => {
 
   <!-- ── Konfirmasi buang perubahan belum disimpan ── -->
   <v-dialog v-model="showDiscardDialog" max-width="380" persistent>
-    <v-card rounded="lg">
-      <v-card-title class="text-subtitle-1 font-weight-bold pa-3 bg-amber-darken-4 text-white">
+    <v-card class="discard-dialog-card">
+      <div class="discard-dialog-icon" aria-hidden="true">
+        <IconAlertCircle :size="28" :stroke-width="1.8" />
+      </div>
+      <h2 class="discard-dialog-title">
         Perubahan Belum Disimpan
-      </v-card-title>
-      <v-card-text class="pa-4 text-body-2">{{ discardMessage }}</v-card-text>
-      <v-card-actions class="pa-2 bg-grey-lighten-4 justify-end">
-        <v-btn size="small" variant="outlined" @click="jawabDiscard(false)">Batal</v-btn>
-        <v-btn size="small" color="error" variant="flat" class="px-4" @click="jawabDiscard(true)">
-          Ya, keluar tanpa simpan
+      </h2>
+      <p class="discard-dialog-message">{{ discardMessage }}</p>
+      <v-card-actions class="discard-dialog-actions">
+        <v-btn class="discard-dialog-cancel" variant="outlined" @click="jawabDiscard(false)">
+          Batal
+        </v-btn>
+        <v-btn class="discard-dialog-confirm" color="error" variant="flat" @click="jawabDiscard(true)">
+          Keluar Tanpa Simpan
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -467,6 +472,70 @@ const exportExcelData = () => {
 </template>
 
 <style scoped>
+.discard-dialog-card {
+  padding: 20px 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(17, 24, 39, 0.12);
+}
+.discard-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: #ffedd5;
+  color: #dc2626;
+}
+.discard-dialog-title {
+  margin: 0;
+  padding: 0;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+  white-space: normal;
+  text-align: left;
+}
+.discard-dialog-card .discard-dialog-message {
+  margin: 8px 0 0;
+  padding: 0;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-align: left;
+}
+.discard-dialog-card .discard-dialog-actions {
+  min-height: 0;
+  padding: 16px 0 0;
+  background: #fff;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.discard-dialog-actions .v-btn {
+  min-width: 0;
+  height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.discard-dialog-cancel {
+  background: #fff;
+  color: #374151;
+  border-color: #d1d5db;
+}
+.discard-dialog-confirm {
+  color: #fff;
+}
 .filter-group {
   display: flex;
   align-items: center;
