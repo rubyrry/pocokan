@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, onActivated } from "vue";
+import { useRoute, onBeforeRouteLeave } from "vue-router";
 import { useToast } from "vue-toastification";
-import { IconClock, IconDeviceFloppy, IconDownload } from "@tabler/icons-vue";
+import { IconClock, IconDeviceFloppy, IconDownload, IconAlertTriangle, IconAlertCircle } from "@tabler/icons-vue";
 
 import BaseBrowse from "@/components/BaseBrowse.vue";
+import { useTabsStore } from "@/stores/tabsStore";
 import { unitApi, type Unit } from "@/api/master/unitApi";
 import { absensiApi, type AbsensiItem } from "@/api/transaksi/absensiApi";
 import { exportToExcel } from "@/utils/exportExcel";
 
 const toast = useToast();
+const route = useRoute();
+const tabsStore = useTabsStore();
 const MENU_ID = "9"; // Sesuai tmenu Absensi
 
 const getTodayFormatted = () => {
@@ -18,23 +22,184 @@ const getTodayFormatted = () => {
 
 const tanggal = ref(getTodayFormatted());
 const unitList = ref<Unit[]>([]);
-const selectedUnit = ref("");
+// Default SEMUA sejak awal supaya filter tidak blank dan tabel tetap bisa
+// dimuat walau daftar unit gagal dimuat di percobaan pertama.
+const selectedUnit = ref("SEMUA");
 const items = ref<AbsensiItem[]>([]);
 const isLoading = ref(false);
 const isSaving = ref(false);
-const hasFilledKehadiran = computed(() =>
-  items.value.some((item) => item.kehadiran !== null && item.kehadiran !== "")
-);
+const isPulling = ref(false);
+let loadRequest = 0;
+
+// Input v-model.number bisa menghasilkan "", null, atau angka.
+const terisi = (value: unknown) => value !== null && value !== undefined && value !== "";
+
+// Nilai kehadiran yang boleh diisi manual: 0 tidak hadir, 0.5 setengah hari,
+// 1 hadir, 2 dua hari. Penarikan wajah selalu menulis 1.
+const NILAI_KEHADIRAN = [0, 0.5, 1, 2];
+
+const hasFilledKehadiran = computed(() => items.value.some((item) => terisi(item.kehadiran)));
+const hasFilledLembur = computed(() => items.value.some((item) => terisi(item.jamlembur)));
+// Save cukup dibuka kalau salah satu kolom terisi: lembur boleh diinput lebih
+// dulu tanpa harus mengisi kehadiran. Kosongnya SELURUH tabel bukan alasan
+// menutup Save — justru itu cara admin mengembalikan nilai ke NULL, dan
+// `isDirty` yang menentukan, bukan `hasSaveableInput`.
+const hasSaveableInput = computed(() => hasFilledKehadiran.value || hasFilledLembur.value);
+
+// ── Perubahan belum disimpan ───────────────────────────────────────────
+// Tombol Save dipakai untuk edit manual. Kehadiran/lembur yang diketik admin
+// hanya tersimpan di memori sampai Save ditekan, jadi perpindahan halaman,
+// tab, atau pergantian filter harus dikonfirmasi lebih dulu.
+
+// Input v-model.number bisa menghasilkan "", null, atau angka. Samakan dulu
+// supaya "1" vs 1 tidak dianggap sebagai perubahan.
+const norm = (value: unknown) =>
+  value === null || value === undefined || value === "" ? "" : String(Number(value));
+
+const fingerprint = (list: AbsensiItem[]) =>
+  list.map((item) => `${item.id}|${norm(item.kehadiran)}|${norm(item.jamlembur)}`).join("\n");
+
+const savedFingerprint = ref("");
+const loadedFilter = ref({ tanggal: "", pabKode: "" });
+const isDirty = computed(() => fingerprint(items.value) !== savedFingerprint.value);
+
+const markSaved = () => {
+  savedFingerprint.value = fingerprint(items.value);
+};
+
+// Satu dialog untuk semua pembatalan: pindah halaman/tab, ganti filter,
+// atau muat ulang data.
+const showDiscardDialog = ref(false);
+const discardMessage = ref("");
+let discardResolver: ((value: boolean) => void) | null = null;
+let discardPending: Promise<boolean> | null = null;
+
+const konfirmasiBuang = (message: string) => {
+  // Kalau dialognya sedang tampil, pakai jawaban yang sedang ditunggu. Kalau
+  // tidak, resolver sebelumnya tertimpa dan panggilannya menggantung selamanya.
+  if (discardPending) return discardPending;
+  discardMessage.value = message;
+  showDiscardDialog.value = true;
+  discardPending = new Promise<boolean>((resolve) => {
+    discardResolver = resolve;
+  });
+  return discardPending;
+};
+
+const jawabDiscard = (ya: boolean) => {
+  showDiscardDialog.value = false;
+  const resolve = discardResolver;
+  discardResolver = null;
+  discardPending = null;
+  resolve?.(ya);
+};
+
+// Refresh/close browser juga membuang isian yang belum disimpan.
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (!isDirty.value) return;
+  e.preventDefault();
+  e.returnValue = "";
+};
+window.addEventListener("beforeunload", handleBeforeUnload);
+
+const pesanKeluar = "Keluar dari halaman ini? Perubahan kehadiran atau jam lembur yang belum disimpan akan hilang.";
+const pesanTutupTab = "Tutup tab ini? Perubahan kehadiran atau jam lembur yang belum disimpan akan hilang.";
+
+// Menutup tab (tombol X, "Tutup Tab", "Tutup Semua Tab", ...) melewati tabsStore,
+// bukan router, jadi perlu guard sendiri. Guard-nya didaftarkan halaman ini lewat
+// setCloseGuard; store tidak perlu tahu apa pun tentang Absensi, halaman lain
+// yang butuh proteksi serupa cukup mendaftarkan callback-nya sendiri.
+//
+// Tab yang ditutup adalah tab aktif, jadi TabView lalu pindah ke tab lain dan
+// onBeforeRouteLeave ikut menyala. Kalau keduanya menanyakan, admin melihat dua
+// dialog untuk satu aksi; karena itu penutupan tab ditandai lebih dulu supaya
+// route guard tidak mengulang pertanyaan yang sudah dijawab.
+let closingOwnTab = false;
+
+tabsStore.setCloseGuard(route.path, async () => {
+  if (!isDirty.value) return true; // Tidak ada yang perlu dikonfirmasi.
+  const bolehTutup = await konfirmasiBuang(pesanTutupTab);
+  if (bolehTutup) closingOwnTab = true;
+  return bolehTutup;
+});
+
+// Pindah tab/menu: TabBar -> TabView -> router.push, jadi guard ini yang menangkap.
+onBeforeRouteLeave(async () => {
+  if (closingOwnTab) {
+    closingOwnTab = false;
+    return true; // Sudah dikonfirmasi lewat dialog tutup tab.
+  }
+  if (!isDirty.value) return true;
+  return konfirmasiBuang(pesanKeluar);
+});
+
+// Halaman ini di-cache KeepAlive, jadi onBeforeUnmount hanya jalan saat instance
+// benar-benar dibuang. Guard tutup tab sengaja TIDAK dilepas di onDeactivated:
+// selama instance masih hidup, isian yang belum disimpan masih ada di sana, dan
+// tab yang di-cache itu masih bisa ditutup dari TabBar.
+onActivated(() => {
+  // Instance diaktifkan kembali (tab dibuka lagi). Buang penanda dari penutupan
+  // tab sebelumnya supaya tidak membuat guard berikutnya lolos tanpa konfirmasi.
+  closingOwnTab = false;
+  // Kalau muat awal gagal (mis. koneksi DB putus saat pertama buka menu),
+  // coba lagi otomatis supaya tidak harus refresh browser manual. Jangan
+  // ganggu isian yang belum disimpan.
+  if (!isDirty.value && !isLoading.value) {
+    if (unitList.value.length === 0) void loadUnits();
+    if (loadedFilter.value.pabKode === "" && loadedFilter.value.tanggal === "") {
+      void loadData();
+    }
+  }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+  tabsStore.setCloseGuard(route.path, null);
+  // Jangan dialog menggantung bila tab ditutup saat konfirmasi terbuka.
+  jawabDiscard(false);
+});
+
+const tidur = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Error koneksi (DB/pool dingin, timeout) jangan ditampilkan mentah seperti
+// "read ECONNRESET" — tampilkan pesan ramah, detail asli hanya ke console.
+const isConnectionError = (e: any) => {
+  const code = String(e?.code ?? "");
+  const msg = String(e?.message ?? e?.response?.data?.message ?? "");
+  return (
+    e?.response?.status === 503 ||
+    /ECONNRESET|ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND|EAI_AGAIN|Network Error/i.test(
+      `${code} ${msg}`,
+    )
+  );
+};
+const pesanMuat = (e: any, fallback: string) =>
+  isConnectionError(e)
+    ? "Koneksi ke server terputus, mencoba memuat ulang..."
+    : (e?.response?.data?.message ?? fallback);
+
+// Daftar unit dimuat terpisah dari data tabel. Gagal di sini tidak boleh
+// mengosongkan filter — selectedUnit tetap SEMUA supaya tabel tetap bisa dimuat.
+const loadUnits = async (maxAttempt = 3) => {
+  for (let attempt = 1; attempt <= maxAttempt; attempt++) {
+    try {
+      unitList.value = await unitApi.getAll();
+      if (!selectedUnit.value) selectedUnit.value = "SEMUA";
+      return;
+    } catch (e) {
+      console.error(`Gagal memuat daftar unit (percobaan ${attempt}):`, e);
+      if (attempt === maxAttempt) {
+        toast.warning("Daftar unit gagal dimuat, menampilkan SEMUA. Coba refresh.");
+        return;
+      }
+      await tidur(400 * attempt);
+    }
+  }
+};
 
 onMounted(async () => {
-  try {
-    unitList.value = await unitApi.getAll();
-    if (unitList.value.length > 0) {
-      selectedUnit.value = unitList.value[0].kode;
-    }
-  } catch (e) {
-    toast.error("Gagal memuat daftar unit.");
-  }
+  await loadUnits();
+  await loadData();
 });
 
 const headers = [
@@ -53,37 +218,85 @@ const filterValues = computed(() => ({
   selectedUnit: selectedUnit.value,
 }));
 
-const loadData = async () => {
+// Muat ulang data. Ada tiga pemicu: filter berubah (otomatis, debounce di
+// BaseBrowse), tombol refresh, dan segarkan setelah Tarik Absensi. Semuanya
+// mengganti isi tabel, jadi isian manual yang belum disimpan akan hilang —
+// konfirmasi dulu, dan kembalikan filter ke nilai yang sedang ditampilkan
+// bila admin batal. `confirmed` dipakai saat pemanggil sudah meminta
+// konfirmasi lebih dulu (mis. Tarik Absensi).
+let suppressNextLoad = 0;
+
+const loadData = async ({ confirmed = false }: { confirmed?: boolean } = {}) => {
+  // Filter yang dikembalikan setelah admin batal tidak boleh memicu muat ulang.
+  if (suppressNextLoad > 0) {
+    suppressNextLoad--;
+    return;
+  }
   if (!tanggal.value) return;
   if (!selectedUnit.value) return;
 
+  const pabKode = selectedUnit.value;
+  const selectedDate = tanggal.value;
+  const filterBerpindah =
+    pabKode !== loadedFilter.value.pabKode || selectedDate !== loadedFilter.value.tanggal;
+
+  if (isDirty.value && !confirmed) {
+    const lanjut = await konfirmasiBuang(
+      filterBerpindah
+        ? "Ganti tanggal atau unit? Kehadiran dan jam lembur yang belum disimpan akan hilang."
+        : "Muat ulang data? Kehadiran dan jam lembur yang belum disimpan akan hilang.",
+    );
+    if (!lanjut) {
+      // Batal: kembalikan filter supaya tampilan tidak berbeda dari data yang dimuat.
+      if (filterBerpindah) {
+        suppressNextLoad = 1;
+        tanggal.value = loadedFilter.value.tanggal;
+        selectedUnit.value = loadedFilter.value.pabKode;
+      }
+      return;
+    }
+  }
+
+  const request = ++loadRequest;
   isLoading.value = true;
   try {
-    items.value = await absensiApi.getKaryawan(selectedUnit.value, tanggal.value);
+    const data = await absensiApi.getKaryawan(pabKode, selectedDate);
+    if (request !== loadRequest || pabKode !== selectedUnit.value || selectedDate !== tanggal.value) return;
+    items.value = data;
+    loadedFilter.value = { tanggal: selectedDate, pabKode };
+    markSaved();
     if (items.value.length === 0) {
       toast.info("Tidak ada karyawan aktif pada unit ini.");
     }
   } catch (e: any) {
-    toast.error(e.response?.data?.message ?? "Gagal memuat karyawan.");
+    if (request === loadRequest) {
+      console.error("Gagal memuat karyawan absensi:", e);
+      toast.error(pesanMuat(e, "Gagal memuat karyawan."));
+    }
   } finally {
-    isLoading.value = false;
+    if (request === loadRequest) isLoading.value = false;
   }
 };
 
 const handleSave = async () => {
+  if (isSaving.value || isPulling.value) return;
   if (items.value.length === 0) {
     toast.warning("Tidak ada data untuk disimpan.");
     return;
   }
-  if (!hasFilledKehadiran.value) {
-    toast.warning("Isi kehadiran minimal satu karyawan sebelum menyimpan.");
+  if (items.value.some((item) =>
+    terisi(item.kehadiran) && !NILAI_KEHADIRAN.includes(Number(item.kehadiran))
+  )) {
+    toast.warning("Kehadiran hanya boleh diisi 0, 0.5, 1, atau 2.");
     return;
   }
-  if (items.value.some((item) =>
-    item.kehadiran !== null && item.kehadiran !== "" &&
-    ![0, 1].includes(Number(item.kehadiran))
+
+  // Menyimpan tabel yang seluruhnya kosong berarti menghapus semua absensi
+  // tanggal & unit ini, jadi pastikan admin memang sengaja mau begitu.
+  if (!hasSaveableInput.value && !confirm(
+    "Tidak ada kehadiran atau jam lembur yang terisi.\n\n" +
+    "Menyimpan akan mengosongkan seluruh data absensi tanggal ini untuk unit yang dipilih. Lanjutkan?"
   )) {
-    toast.warning("Kehadiran hanya boleh diisi 0 atau 1.");
     return;
   }
 
@@ -94,7 +307,12 @@ const handleSave = async () => {
       tanggal: tanggal.value,
       items: items.value,
     });
-    toast.success("Absensi berhasil disimpan.");
+    markSaved();
+    toast.success(
+      hasSaveableInput.value
+        ? "Absensi berhasil disimpan."
+        : "Seluruh data absensi tanggal ini dikosongkan."
+    );
   } catch (e: any) {
     toast.error(e.response?.data?.message ?? "Gagal menyimpan absensi.");
   } finally {
@@ -102,9 +320,47 @@ const handleSave = async () => {
   }
 };
 
+const handleTarikAbsensi = async () => {
+  if (isPulling.value || isSaving.value || isLoading.value) return;
+  if (!tanggal.value || !selectedUnit.value) {
+    toast.warning("Pilih tanggal dan unit terlebih dahulu.");
+    return;
+  }
+  // Tarik Absensi menyegarkan tabel di akhir, jadi isian manual yang belum
+  // disimpan ikut terbuang. Minta konfirmasi lebih dulu.
+  if (isDirty.value) {
+    const lanjut = await konfirmasiBuang(
+      "Tarik Absensi akan memuat ulang tabel. Kehadiran dan jam lembur yang belum disimpan akan hilang. Lanjutkan?",
+    );
+    if (!lanjut) return;
+  }
+  isPulling.value = true;
+  try {
+    const result = await absensiApi.tarikWajah({
+      pabKode: selectedUnit.value,
+      tanggal: tanggal.value,
+    });
+    if (result.data.inserted + result.data.updated > 0) toast.success(result.message);
+    else toast.info(result.message);
+    if (result.data.skipped > 0) {
+      toast.info(`${result.data.skipped} record sumber dilewati (duplikat, tidak valid, atau karyawan tidak aktif/tidak ditemukan).`);
+    }
+  } catch (e: any) {
+    toast.error(e.response?.data?.message ?? "Gagal menarik absensi wajah. Silakan coba kembali.");
+  } finally {
+    // MyISAM dapat menghasilkan penulisan parsial saat error; selalu segarkan.
+    await loadData({ confirmed: true });
+    isPulling.value = false;
+  }
+};
+
 const exportExcelData = () => {
   if (!items.value.length) {
     toast.warning("Tidak ada data untuk diekspor.");
+    return;
+  }
+  if (isDirty.value) {
+    toast.warning("Ada perubahan kehadiran atau jam lembur yang belum disimpan. Klik Save terlebih dahulu sebelum Export.");
     return;
   }
   exportToExcel({
@@ -134,19 +390,20 @@ const exportExcelData = () => {
     :is-loading="isLoading"
     item-value="no"
     :filter-values="filterValues"
-    @refresh="loadData"
+    @refresh="loadData()"
     search-placeholder="Cari ID, nama, bagian atau unit..."
   >
     <!-- ── Filter ── -->
     <template #filter-left>
       <div class="filter-group">
         <span class="filter-lbl">Tanggal</span>
-        <input v-model="tanggal" type="date" class="date-inp" />
+        <input v-model="tanggal" type="date" class="date-inp" :disabled="isPulling" />
       </div>
 
       <div class="filter-group">
         <span class="filter-lbl">Unit</span>
-        <select v-model="selectedUnit" class="select-inp">
+        <select v-model="selectedUnit" class="select-inp" :disabled="isPulling">
+          <option value="SEMUA">SEMUA</option>
           <option
             v-for="u in unitList"
             :key="u.kode"
@@ -158,8 +415,20 @@ const exportExcelData = () => {
       </div>
     </template>
 
-    <!-- ── Aksi: Export & Save ── -->
+    <!-- ── Aksi: Export, Tarik Absensi & Save ── -->
     <template #extra-actions>
+      <v-chip
+        v-if="isDirty"
+        size="small"
+        color="warning"
+        variant="tonal"
+        class="mr-1 font-weight-bold"
+        title="Perubahan kehadiran/jam lembur belum disimpan. Tekan Save untuk menyimpan."
+      >
+        <IconAlertTriangle :size="14" class="mr-1" />
+        Belum disimpan
+      </v-chip>
+
       <v-btn
         size="small"
         variant="tonal"
@@ -174,10 +443,23 @@ const exportExcelData = () => {
       <v-btn
         size="small"
         color="primary"
+        variant="tonal"
+        @click="handleTarikAbsensi"
+        :loading="isPulling"
+        :disabled="isPulling || isSaving || isLoading || !tanggal || !selectedUnit"
+      >
+        <template #loader>Menarik absensi...</template>
+        <IconDownload :size="16" class="mr-1" />
+        Tarik Absensi
+      </v-btn>
+
+      <v-btn
+        size="small"
+        color="primary"
         variant="flat"
         @click="handleSave"
         :loading="isSaving"
-        :disabled="!items.length || !hasFilledKehadiran"
+        :disabled="isPulling || !items.length || !isDirty"
       >
         <IconDeviceFloppy :size="16" class="mr-1" />
         Save
@@ -190,10 +472,12 @@ const exportExcelData = () => {
         <input
           type="number"
           v-model.number="item.kehadiran"
+          :disabled="isPulling"
           class="table-inp"
           min="0"
-          max="1"
-          step="1"
+          max="2"
+          step="0.5"
+          title="0 tidak hadir, 0.5 setengah hari, 1 hadir, 2 dua hari. Kosongkan untuk mengembalikan ke NULL."
         />
       </span>
     </template>
@@ -203,16 +487,103 @@ const exportExcelData = () => {
         <input
           type="number"
           v-model.number="item.jamlembur"
+          :disabled="isPulling"
           class="table-inp"
           min="0"
           step="1"
+          title="Kosongkan untuk mengembalikan ke NULL."
         />
       </span>
     </template>
   </BaseBrowse>
+
+  <!-- ── Konfirmasi buang perubahan belum disimpan ── -->
+  <v-dialog v-model="showDiscardDialog" max-width="380" persistent>
+    <v-card class="discard-dialog-card">
+      <div class="discard-dialog-icon" aria-hidden="true">
+        <IconAlertCircle :size="28" :stroke-width="1.8" />
+      </div>
+      <h2 class="discard-dialog-title">
+        Perubahan Belum Disimpan
+      </h2>
+      <p class="discard-dialog-message">{{ discardMessage }}</p>
+      <v-card-actions class="discard-dialog-actions">
+        <v-btn class="discard-dialog-cancel" variant="outlined" @click="jawabDiscard(false)">
+          Batal
+        </v-btn>
+        <v-btn class="discard-dialog-confirm" color="error" variant="flat" @click="jawabDiscard(true)">
+          Keluar Tanpa Simpan
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
+.discard-dialog-card {
+  padding: 20px 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(17, 24, 39, 0.12);
+}
+.discard-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  background: #ffedd5;
+  color: #dc2626;
+}
+.discard-dialog-title {
+  margin: 0;
+  padding: 0;
+  color: #111827;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+  white-space: normal;
+  text-align: left;
+}
+.discard-dialog-card .discard-dialog-message {
+  margin: 8px 0 0;
+  padding: 0;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-align: left;
+}
+.discard-dialog-card .discard-dialog-actions {
+  min-height: 0;
+  padding: 16px 0 0;
+  background: #fff;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.discard-dialog-actions .v-btn {
+  min-width: 0;
+  height: 38px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.discard-dialog-cancel {
+  background: #fff;
+  color: #374151;
+  border-color: #d1d5db;
+}
+.discard-dialog-confirm {
+  color: #fff;
+}
 .filter-group {
   display: flex;
   align-items: center;

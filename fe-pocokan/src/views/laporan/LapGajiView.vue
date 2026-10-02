@@ -128,18 +128,21 @@ const laporanGajiExportColumns: MultiSheetExportColumn[] = [
     key: "kehadiran",
     width: 18,
     currency: true,
+    numFmt: '"Rp"* #,##0',
   },
   {
     header: "Lembur",
     key: "lembur",
     width: 18,
     currency: true,
+    numFmt: '"Rp"* #,##0.00;"Rp"* -#,##0.00;"Rp"* 0',
   },
   {
     header: "Potongan",
     key: "potongan",
     width: 18,
     currency: true,
+    numFmt: '"Rp"* #,##0',
   },
   {
     header: "THP",
@@ -237,6 +240,33 @@ const exportExcelData = async () => {
         ],
       };
     });
+
+  const totalSemuaTHP = sumSalaryRows(items.value, "thp");
+  sheets.unshift({
+    name: "SEMUA",
+    columns: laporanGajiExportColumns,
+    dataCount: items.value.length,
+    totalMergeThroughKey: "lemburGT2",
+    rows: [
+      ...items.value,
+      {
+        no: "TOTAL",
+        id: "",
+        nama: "",
+        unit: "",
+        bagian: "",
+        hari: "",
+        lemburLE2: "",
+        lemburGT2: "",
+        kehadiran: sumSalaryRows(items.value, "kehadiran"),
+        lembur: sumSalaryRows(items.value, "lembur"),
+        potongan: sumSalaryRows(items.value, "potongan"),
+        thp: totalSemuaTHP,
+        rekening: "",
+        terbilang: formatTerbilangGaji(totalSemuaTHP),
+      },
+    ],
+  });
 
   try {
     await exportToMultiSheetExcel({

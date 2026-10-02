@@ -66,7 +66,7 @@ const isCash = (rekening: unknown) =>
 
 // Slip hanya dicetak bila cash DAN ada uang yang benar-benar diterima.
 // THP = kehadiran + lembur - potongan (lihat lapGajiService.js),
-// sama dengan nilai "Di terima", jadi dipakai sebagai indikator final.
+// sama dengan nilai "Diterima", jadi dipakai sebagai indikator final.
 const isEligibleSlip = (row: LapGajiItem) =>
   isCash(row.rekening) && roundTHPGaji(row.thp) > 0;
 
@@ -175,24 +175,24 @@ onMounted(() => {
         <div class="kv-group slip-nominal">
           <div class="kv">
             <span class="k">Gaji</span><span class="c">:</span
-            ><span class="v">Rp {{ formatNumber(row.kehadiran) }}</span>
+            ><span class="v">Rp{{ formatNumber(row.kehadiran) }}</span>
           </div>
           <div class="kv">
             <span class="k">Lembur</span><span class="c">:</span
-            ><span class="v">Rp {{ formatNumber(row.lembur) }}</span>
+            ><span class="v">Rp{{ formatNumber(row.lembur) }}</span>
           </div>
           <div class="kv">
             <span class="k">Total</span><span class="c">:</span
-            ><span class="v">Rp {{ formatWholeNumber(row.thp) }}</span>
+            ><span class="v">Rp{{ formatWholeNumber(row.thp) }}</span>
           </div>
           <div class="kv">
             <span class="k">Pot. BS</span><span class="c">:</span
-            ><span class="v pot-bs">Rp {{ formatNumber(row.potongan) }}</span>
+            ><span class="v pot-bs">Rp{{ formatNumber(row.potongan) }}</span>
           </div>
         </div>
 
         <div class="slip-diterima">
-          Di terima: Rp {{ formatWholeNumber(row.thp) }}
+          Diterima: Rp{{ formatWholeNumber(row.thp) }},-
         </div>
         <div class="slip-terbilang">{{ row.terbilang }}</div>
       </div>
@@ -297,7 +297,8 @@ onMounted(() => {
   align-items: baseline;
   column-gap: 1.5mm;
 }
-.kv-left .kv {
+.kv-left .kv,
+.slip-nominal .kv {
   grid-template-columns: 14mm 3mm 1fr;
 }
 .kv-right .kv {
@@ -306,9 +307,6 @@ onMounted(() => {
 .slip-nominal {
   row-gap: 0.6mm;
   margin-bottom: 0;
-}
-.slip-nominal .kv {
-  grid-template-columns: 16mm 3mm 1fr;
 }
 .kv .k {
   white-space: nowrap;

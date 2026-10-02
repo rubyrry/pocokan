@@ -808,7 +808,8 @@ const doExportPivot = async () => {
 .lap-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
+  height: 100%;
+  min-height: 0;
   padding: 8px 12px;
   gap: 6px;
 }
@@ -902,6 +903,7 @@ const doExportPivot = async () => {
 }
 .pivot-container {
   flex: 1;
+  min-height: 0;
   overflow: auto;
   padding: 12px;
 }

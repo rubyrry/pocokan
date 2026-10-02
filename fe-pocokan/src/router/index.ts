@@ -868,7 +868,14 @@ const prettyRouteName = (name: string) =>
     .trim()
     .replace(/^./, (c) => c.toUpperCase());
 
-router.afterEach((to) => {
+router.afterEach((to, _from, failure) => {
+  // Navigasi yang GAGAL (dibatalkan guard, digantikan navigasi lain, atau
+  // di-redirect) tetap memicu afterEach di vue-router. Kalau `to` yang
+  // dibatalkan ikut dibuatkan tab, muncul tab untuk halaman yang tidak pernah
+  // dirender, dan TabView lalu mencoba push lagi sehingga guard kepicu dua
+  // kali. Jadi halaman yang gagal dicapai tidak boleh jadi tab.
+  if (failure) return;
+
   // Halaman BlankLayout (login/cetak/error) tidak punya tab
   if (to.meta.layout === "BlankLayout") return;
 
