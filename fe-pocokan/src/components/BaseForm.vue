@@ -178,7 +178,9 @@ const emit = defineEmits([
 }
 .form-grid-container {
   padding: 12px;
-  height: calc(100vh - 120px);
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 0;
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 16px;
@@ -193,7 +195,7 @@ const emit = defineEmits([
 .form-grid-container.custom-layout {
   display: block;
   padding: 0;
-  height: calc(100vh - 120px);
+  height: 100%;
   overflow: hidden;
 }
 
@@ -253,7 +255,6 @@ const emit = defineEmits([
     grid-template-columns: 280px 1fr;
     gap: 12px;
     padding: 10px;
-    height: calc(100vh - 110px);
   }
   .form-grid-container.three-column {
     grid-template-columns: 240px 1fr 180px;
@@ -266,8 +267,8 @@ const emit = defineEmits([
     /* Stack kolom vertikal */
     grid-template-columns: 1fr !important;
     grid-template-rows: auto;
-    height: auto;
-    min-height: calc(100vh - 110px);
+    height: 100%;
+    min-height: 0;
     overflow-y: auto;
     padding: 8px;
     gap: 10px;
@@ -283,6 +284,10 @@ const emit = defineEmits([
   /* Kolom kiri tidak lagi fixed width */
   .left-column {
     min-height: unset;
+  }
+  .form-left-col {
+    height: auto;
+    overflow: visible;
   }
   .right-column {
     min-width: unset;

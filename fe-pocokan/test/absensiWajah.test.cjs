@@ -823,14 +823,14 @@ test("TEST 24: jam lembur saja sudah cukup untuk mengaktifkan dan menjalankan Sa
 });
 
 // ── TEST 25: kehadiran setengah hari ────────────────────────────────────
-test("TEST 25: kehadiran menerima 0.5 dan menolak nilai di luar 0/0.5/1", async () => {
+test("TEST 25: kehadiran menerima 0.5 dan 2, menolak nilai di luar 0/0.5/1/2", async () => {
   const payloadCalls = [];
   const env = await mountAbsensi({ absensiApi: kosongkan(payloadCalls) });
   const { captured, all, text, flush, unmount } = env;
   try {
     await flush();
-    const hadir = all().find(el => el.type === "input" && el.props.max === "1");
-    assert.equal(hadir.props.step, "0.5", "input harus melangkah 0 -> 0.5 -> 1");
+    const hadir = all().find(el => el.type === "input" && el.props.max === "2");
+    assert.equal(hadir.props.step, "0.5", "input harus memakai langkah 0.5 untuk nilai 0, 0.5, 1, 2");
     const save = () => all().find(el => el.type === "button" && text(el).includes("Save"));
 
     captured.items[0].kehadiran = 0.5;
@@ -841,16 +841,23 @@ test("TEST 25: kehadiran menerima 0.5 dan menolak nilai di luar 0/0.5/1", async 
     assert.equal(payloadCalls.length, 1);
     assert.equal(payloadCalls[0].items[0].kehadiran, 0.5, "setengah hari harus tersimpan apa adanya");
 
+    captured.items[0].kehadiran = 2;
+    await flush();
+    await save().props.onClick();
+    await flush();
+    assert.equal(payloadCalls.length, 2);
+    assert.equal(payloadCalls[1].items[0].kehadiran, 2, "nilai 2 harus tersimpan apa adanya");
+
     // Nilai di luar daftar ditolak di frontend, jadi tidak sampai ke backend.
-    for (const value of [0.3, 2, -1]) {
+    for (const value of [0.3, 1.5, -1]) {
       captured.items[0].kehadiran = value;
       await flush();
       assert.equal(save().props.disabled, false, `${value} tetap boleh diklik supaya bisa ditolak dengan pesan`);
       await save().props.onClick();
       await flush();
-      assert.equal(payloadCalls.length, 1, `nilai ${value} tidak boleh terkirim`);
+      assert.equal(payloadCalls.length, 2, `nilai ${value} tidak boleh terkirim`);
       const warning = env.feedback.filter(f => f.level === "warning").at(-1);
-      assert.match(warning.text, /Kehadiran hanya boleh diisi 0, 0\.5, atau 1\./, `pesan tolak untuk ${value}`);
+      assert.match(warning.text, /Kehadiran hanya boleh diisi 0, 0\.5, 1, atau 2\./, `pesan tolak untuk ${value}`);
     }
   } finally {
     unmount();

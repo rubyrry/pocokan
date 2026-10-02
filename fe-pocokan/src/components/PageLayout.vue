@@ -101,16 +101,21 @@ const reloadPage = () => {
   margin: 0 auto;
   width: 100%;
   height: 100%;
+  min-height: 0;
 }
 .desktop-mode {
-  height: calc(100vh - 64px);
   padding: 8px 12px;
   gap: 6px;
 }
 .modern-mode {
+  height: auto;
   padding: 20px 24px;
   gap: 16px;
-  min-height: calc(100vh - 52px);
+  min-height: 100%;
+}
+.modern-mode .content-area,
+.modern-mode .content-wrapper {
+  flex: 1 0 auto;
 }
 
 /* ── Header ── */
@@ -203,7 +208,6 @@ const reloadPage = () => {
 
 @media (max-width: 1024px) {
   .desktop-mode {
-    height: calc(100vh - 58px);
     padding: 5px 8px;
     gap: 4px;
   }
@@ -225,7 +229,6 @@ const reloadPage = () => {
 
 @media (max-width: 768px) {
   .desktop-mode {
-    height: calc(100vh - 52px);
     padding: 4px 6px;
     gap: 3px;
   }

@@ -1068,7 +1068,7 @@ watch(
   flex-direction: column;
   border: 1px solid var(--ds-border, #A0AAB8);
   border-radius: 0;
-  overflow: auto;
+  overflow: hidden;
   flex: 1;
   min-height: 0;
   background: var(--ds-surface, #ffffff);
@@ -1077,7 +1077,7 @@ watch(
 .table-wrap {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 .base-table {
   font-size: 12px;
@@ -1085,6 +1085,7 @@ watch(
 }
 .base-table :deep(.v-table__wrapper) {
   overflow: auto;
+  overscroll-behavior: contain;
   flex: 1;
   min-height: 0;
 }

@@ -229,12 +229,12 @@ dan form `AbsensiView.vue`. Tidak ada perubahan schema: `ab_hari` sudah
 ### 0,5 hari
 
 Nilai kehadiran yang boleh diisi manual adalah `0` (tidak hadir), `0,5` (setengah
-hari), dan `1` (hadir). Semuanya bertipe `DOUBLE` di database, jadi setengah hari
+hari), `1` (hadir), dan `2` (dua hari). Semuanya bertipe `DOUBLE` di database, jadi setengah hari
 tidak pernah dibulatkan.
 
-- Frontend: input Kehadiran memakai `step="0.5"` (dulu `step="1"`), jadi panah
-  atas/bawah melangkah 0 → 0,5 → 1, dan teks di input memberi tahu nilainya.
-- `NILAI_KEHADIRAN = [0, 0.5, 1]` divalidasi sebelum request. Nilai di luar daftar
+- Frontend: input Kehadiran memakai `step="0.5"` (dulu `step="1"`), dengan `max="2"`,
+  jadi nilai yang valid adalah 0, 0,5, 1, dan 2, dan teks di input memberi tahu nilainya.
+- `NILAI_KEHADIRAN = [0, 0.5, 1, 2]` divalidasi sebelum request. Nilai di luar daftar
   ditolak di browser dengan toast; tidak pernah sampai ke backend.
 - Backend melakukan pemeriksaan yang sama sebelum `DELETE`, jadi payload yang
   ditolak tidak menghapus data lama.

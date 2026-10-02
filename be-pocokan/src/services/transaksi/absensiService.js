@@ -1,8 +1,8 @@
 const db = require("../../config/database");
 
 // Nilai ab_hari (hari kerja) yang boleh diisi manual: 0 tidak hadir,
-// 0.5 setengah hari, 1 hadir. Penarikan wajah selalu menulis 1.
-const HADIR_VALUES = [0, 0.5, 1];
+// 0.5 setengah hari, 1 hadir, 2 dua hari. Penarikan wajah selalu menulis 1.
+const HADIR_VALUES = [0, 0.5, 1, 2];
 const ALL_UNITS = "SEMUA";
 
 const getKaryawanByUnit = async (pabKode, tanggal) => {
@@ -70,9 +70,9 @@ const saveAbsensi = async (payload) => {
   // DELETE di bawah tetap berjalan sehingga baris lamanya hilang. Menolak
   // payload kosong membuat nilai yang sudah dikosongkan admin tidak bisa
   // disimpan sama sekali.
-  // 0 = tidak hadir, 0.5 = setengah hari, 1 = hadir.
+  // 0 = tidak hadir, 0.5 = setengah hari, 1 = hadir, 2 = dua hari.
   if (filledItems.some(item => terisi(item.kehadiran) && !HADIR_VALUES.includes(Number(item.kehadiran)))) {
-    throw new Error("Kehadiran hanya boleh diisi 0, 0.5, atau 1.");
+    throw new Error("Kehadiran hanya boleh diisi 0, 0.5, 1, atau 2.");
   }
 
   // SEMUA bukan kode unit database. Resolusi unit dari master dilakukan sebelum

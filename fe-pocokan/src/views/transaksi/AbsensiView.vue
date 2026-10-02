@@ -33,8 +33,8 @@ let loadRequest = 0;
 const terisi = (value: unknown) => value !== null && value !== undefined && value !== "";
 
 // Nilai kehadiran yang boleh diisi manual: 0 tidak hadir, 0.5 setengah hari,
-// 1 hadir. Penarikan wajah selalu menulis 1.
-const NILAI_KEHADIRAN = [0, 0.5, 1];
+// 1 hadir, 2 dua hari. Penarikan wajah selalu menulis 1.
+const NILAI_KEHADIRAN = [0, 0.5, 1, 2];
 
 const hasFilledKehadiran = computed(() => items.value.some((item) => terisi(item.kehadiran)));
 const hasFilledLembur = computed(() => items.value.some((item) => terisi(item.jamlembur)));
@@ -239,7 +239,7 @@ const handleSave = async () => {
   if (items.value.some((item) =>
     terisi(item.kehadiran) && !NILAI_KEHADIRAN.includes(Number(item.kehadiran))
   )) {
-    toast.warning("Kehadiran hanya boleh diisi 0, 0.5, atau 1.");
+    toast.warning("Kehadiran hanya boleh diisi 0, 0.5, 1, atau 2.");
     return;
   }
 
@@ -427,9 +427,9 @@ const exportExcelData = () => {
           :disabled="isPulling"
           class="table-inp"
           min="0"
-          max="1"
+          max="2"
           step="0.5"
-          title="0 tidak hadir, 0.5 setengah hari, 1 hadir. Kosongkan untuk mengembalikan ke NULL."
+          title="0 tidak hadir, 0.5 setengah hari, 1 hadir, 2 dua hari. Kosongkan untuk mengembalikan ke NULL."
         />
       </span>
     </template>

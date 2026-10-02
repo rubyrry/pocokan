@@ -328,7 +328,8 @@ const rowClass = (status: string) => {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  height: calc(100vh - 120px);
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: #f1f1f8;
 }

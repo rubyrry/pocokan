@@ -252,13 +252,13 @@ test("Integrasi Tarik Absensi dengan SQL MariaDB/MyISAM", {
     assert.equal(result.savedCount, 3);
     assert.deepEqual(await rowsOfKehadiran(), [["A1", 0.5], ["A2", 0], ["N1", 1]]);
   });
-  await t.test("Save absensi: nilai kehadiran selain 0/0.5/1 ditolak tanpa menyentuh data lama", async () => {
+  await t.test("Save absensi: nilai kehadiran selain 0/0.5/1/2 ditolak tanpa menyentuh data lama", async () => {
     await reset();
     await service.saveAbsensi({ pabKode: "U1", tanggal, items: [{ id: "A1", kehadiran: 1, jamlembur: 2 }] });
-    for (const value of [0.3, 2, -1, "abc"]) {
+    for (const value of [0.3, 1.5, -1, "abc"]) {
       await assert.rejects(
         service.saveAbsensi({ pabKode: "U1", tanggal, items: [{ id: "A2", kehadiran: value, jamlembur: null }] }),
-        /Kehadiran hanya boleh diisi 0, 0.5, atau 1\./,
+        /Kehadiran hanya boleh diisi 0, 0\.5, 1, atau 2\./,
         `nilai ${value} harus ditolak`,
       );
     }

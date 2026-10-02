@@ -276,7 +276,7 @@ const toggleGroup = (title: string) => {
 </script>
 
 <template>
-  <v-app>
+  <v-app class="finance-app">
     <v-navigation-drawer
       v-model="drawer"
       :rail="!isMobile && rail"
@@ -508,6 +508,17 @@ const toggleGroup = (title: string) => {
 </template>
 
 <style scoped>
+/* Scroll hanya di konten/tabel, bukan dokumen di belakang layout. */
+:global(html:has(.finance-app)) {
+  overflow: hidden;
+}
+.finance-app :deep(.v-application__wrap) {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ── Drawer ── */
 .finance-drawer {
   background: #2a497c !important;
@@ -596,7 +607,11 @@ const toggleGroup = (title: string) => {
 /* ── Main ── */
 .finance-main {
   background-color: #f1f1f8 !important;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .finance-main-inner {
@@ -604,6 +619,8 @@ const toggleGroup = (title: string) => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Transition */
