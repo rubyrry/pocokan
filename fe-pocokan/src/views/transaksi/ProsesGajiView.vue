@@ -24,7 +24,8 @@ const getTodayFormatted = () => {
 const periode1 = ref(getTodayFormatted());
 const periode2 = ref(getTodayFormatted());
 const unitList = ref<Unit[]>([]);
-const selectedUnit = ref("");
+// Default SEMUA sejak awal supaya filter tidak blank saat muat pertama gagal.
+const selectedUnit = ref("SEMUA");
 const items = ref<ProsesGajiItem[]>([]);
 const isLoading = ref(false);
 const isSaving = ref(false);
@@ -78,7 +79,14 @@ onBeforeRouteLeave(() => {
   return konfirmasiBuang("Keluar dari halaman ini? Perubahan potongan yang belum disimpan akan hilang.");
 });
 // Guard tetap terdaftar selama instance tersimpan di KeepAlive.
-onActivated(() => { closingOwnTab = false; });
+onActivated(() => {
+  closingOwnTab = false;
+  // Muat ulang otomatis kalau muat awal gagal, tanpa refresh browser manual.
+  if (!isDirty.value && !isLoading.value && items.value.length === 0) {
+    if (unitList.value.length === 0) void loadUnits().then(() => loadData());
+    else void loadData();
+  }
+});
 const handleBeforeUnload = (e: BeforeUnloadEvent) => {
   if (!isDirty.value) return;
   e.preventDefault();
@@ -91,13 +99,43 @@ onBeforeUnmount(() => {
   jawabDiscard(false);
 });
 
-onMounted(async () => {
-  try {
-    unitList.value = await unitApi.getAll();
-    selectedUnit.value = "SEMUA";
-  } catch (e) {
-    toast.error("Gagal memuat daftar unit.");
+// Error koneksi jangan ditampilkan mentah seperti "read ECONNRESET".
+const isConnectionError = (e: any) => {
+  const code = String(e?.code ?? "");
+  const msg = String(e?.message ?? e?.response?.data?.message ?? "");
+  return (
+    e?.response?.status === 503 ||
+    /ECONNRESET|ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND|EAI_AGAIN|Network Error/i.test(
+      `${code} ${msg}`,
+    )
+  );
+};
+const pesanMuat = (e: any, fallback: string) =>
+  isConnectionError(e)
+    ? "Koneksi ke server terputus, mencoba memuat ulang..."
+    : (e?.response?.data?.message ?? fallback);
+
+const tidur = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const loadUnits = async (maxAttempt = 3) => {
+  for (let attempt = 1; attempt <= maxAttempt; attempt++) {
+    try {
+      unitList.value = await unitApi.getAll();
+      if (!selectedUnit.value) selectedUnit.value = "SEMUA";
+      return;
+    } catch (e) {
+      console.error(`Gagal memuat daftar unit (percobaan ${attempt}):`, e);
+      if (attempt === maxAttempt) {
+        toast.warning("Daftar unit gagal dimuat, menampilkan SEMUA. Coba refresh.");
+        return;
+      }
+      await tidur(400 * attempt);
+    }
   }
+};
+
+onMounted(async () => {
+  await loadUnits();
+  await loadData();
 });
 
 const headers = [
@@ -131,7 +169,8 @@ const loadData = async () => {
       toast.info("Tidak ada data karyawan / absensi pada rentang periode ini.");
     }
   } catch (e: any) {
-    toast.error(e.response?.data?.message ?? "Gagal memuat data proses gaji.");
+    console.error("Gagal memuat data proses gaji:", e);
+    toast.error(pesanMuat(e, "Gagal memuat data proses gaji."));
   } finally {
     isLoading.value = false;
   }

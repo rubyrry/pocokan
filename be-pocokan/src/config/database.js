@@ -11,6 +11,9 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   timezone: "+07:00",
+  // Kurangi "read ECONNRESET" saat koneksi idle lama: jaga TCP tetap hidup.
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
 });
 
 // Test koneksi saat startup

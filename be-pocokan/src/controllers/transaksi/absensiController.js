@@ -1,5 +1,12 @@
 const svc = require("../../services/transaksi/absensiService");
 
+// Jangan bocorkan pesan DB mentah seperti "read ECONNRESET" ke user.
+const isConnectionError = (e) =>
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND|EAI_AGAIN/i.test(
+    `${e?.code ?? ""} ${e?.message ?? ""}`,
+  );
+const connectionMessage = "Koneksi database terputus, silakan coba lagi.";
+
 const getKaryawanByUnit = async (req, res) => {
   try {
     const { pabKode, tanggal } = req.query;
@@ -9,6 +16,10 @@ const getKaryawanByUnit = async (req, res) => {
     const data = await svc.getKaryawanByUnit(pabKode, tanggal);
     res.json({ success: true, data });
   } catch (e) {
+    if (isConnectionError(e)) {
+      console.error("Koneksi DB absensi terputus:", e.code ?? e.message);
+      return res.status(503).json({ success: false, message: connectionMessage });
+    }
     res.status(500).json({ success: false, message: e.message });
   }
 };

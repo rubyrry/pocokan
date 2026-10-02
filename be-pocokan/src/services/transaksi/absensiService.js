@@ -1,5 +1,20 @@
 const db = require("../../config/database");
 
+// Koneksi idle yang diputus MySQL (ECONNRESET/dsb) cukup dicoba sekali lagi.
+const isConnectionError = (e) =>
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND|EAI_AGAIN/i.test(
+    `${e?.code ?? ""} ${e?.message ?? ""}`,
+  );
+const queryRetryOnce = async (sql, params) => {
+  try {
+    return await db.query(sql, params);
+  } catch (e) {
+    if (!isConnectionError(e)) throw e;
+    await new Promise((r) => setTimeout(r, 300));
+    return await db.query(sql, params);
+  }
+};
+
 // Nilai ab_hari (hari kerja) yang boleh diisi manual: 0 tidak hadir,
 // 0.5 setengah hari, 1 hadir, 2 dua hari. Penarikan wajah selalu menulis 1.
 const HADIR_VALUES = [0, 0.5, 1, 2];
@@ -8,7 +23,7 @@ const ALL_UNITS = "SEMUA";
 const getKaryawanByUnit = async (pabKode, tanggal) => {
   const semua = pabKode === ALL_UNITS;
   // Ambil karyawan aktif di unit (pabrik) tersebut dengan JOIN ke tbagian untuk mendapatkan nama bagian (bag_nama)
-  const [karyawan] = await db.query(
+  const [karyawan] = await queryRetryOnce(
     `SELECT 
        k.kar_kode AS id, 
        k.kar_nama AS nama, 
@@ -22,7 +37,7 @@ const getKaryawanByUnit = async (pabKode, tanggal) => {
   );
 
   // Cek apakah sudah ada data absensi untuk tanggal & unit ini
-  const [existing] = await db.query(
+  const [existing] = await queryRetryOnce(
     `SELECT ab_kar_kode, ab_hari, ab_jamlembur 
      FROM tabsensi 
       WHERE ${semua ? "" : "ab_pab_kode = ? AND "}ab_tanggal = ?`,

@@ -1,8 +1,20 @@
 const db = require("../../config/database");
 
+const isConnectionError = (e) =>
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND|EAI_AGAIN/i.test(
+    `${e?.code ?? ""} ${e?.message ?? ""}`,
+  );
+
 const getAll = async () => {
-  const [rows] = await db.query(`SELECT pab_kode AS kode, pab_nama AS nama FROM tpabrik ORDER BY pab_kode`);
-  return rows;
+  try {
+    const [rows] = await db.query(`SELECT pab_kode AS kode, pab_nama AS nama FROM tpabrik ORDER BY pab_kode`);
+    return rows;
+  } catch (e) {
+    if (!isConnectionError(e)) throw e;
+    await new Promise((r) => setTimeout(r, 300));
+    const [rows] = await db.query(`SELECT pab_kode AS kode, pab_nama AS nama FROM tpabrik ORDER BY pab_kode`);
+    return rows;
+  }
 };
 
 const saveData = async (payload) => {

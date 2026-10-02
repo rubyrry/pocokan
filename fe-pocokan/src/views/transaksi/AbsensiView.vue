@@ -22,7 +22,9 @@ const getTodayFormatted = () => {
 
 const tanggal = ref(getTodayFormatted());
 const unitList = ref<Unit[]>([]);
-const selectedUnit = ref("");
+// Default SEMUA sejak awal supaya filter tidak blank dan tabel tetap bisa
+// dimuat walau daftar unit gagal dimuat di percobaan pertama.
+const selectedUnit = ref("SEMUA");
 const items = ref<AbsensiItem[]>([]);
 const isLoading = ref(false);
 const isSaving = ref(false);
@@ -139,6 +141,15 @@ onActivated(() => {
   // Instance diaktifkan kembali (tab dibuka lagi). Buang penanda dari penutupan
   // tab sebelumnya supaya tidak membuat guard berikutnya lolos tanpa konfirmasi.
   closingOwnTab = false;
+  // Kalau muat awal gagal (mis. koneksi DB putus saat pertama buka menu),
+  // coba lagi otomatis supaya tidak harus refresh browser manual. Jangan
+  // ganggu isian yang belum disimpan.
+  if (!isDirty.value && !isLoading.value) {
+    if (unitList.value.length === 0) void loadUnits();
+    if (loadedFilter.value.pabKode === "" && loadedFilter.value.tanggal === "") {
+      void loadData();
+    }
+  }
 });
 
 onBeforeUnmount(() => {
@@ -148,13 +159,47 @@ onBeforeUnmount(() => {
   jawabDiscard(false);
 });
 
-onMounted(async () => {
-  try {
-    unitList.value = await unitApi.getAll();
-    selectedUnit.value = "SEMUA";
-  } catch (e) {
-    toast.error("Gagal memuat daftar unit.");
+const tidur = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Error koneksi (DB/pool dingin, timeout) jangan ditampilkan mentah seperti
+// "read ECONNRESET" — tampilkan pesan ramah, detail asli hanya ke console.
+const isConnectionError = (e: any) => {
+  const code = String(e?.code ?? "");
+  const msg = String(e?.message ?? e?.response?.data?.message ?? "");
+  return (
+    e?.response?.status === 503 ||
+    /ECONNRESET|ECONNREFUSED|ETIMEDOUT|PROTOCOL_CONNECTION_LOST|ENOTFOUND|EAI_AGAIN|Network Error/i.test(
+      `${code} ${msg}`,
+    )
+  );
+};
+const pesanMuat = (e: any, fallback: string) =>
+  isConnectionError(e)
+    ? "Koneksi ke server terputus, mencoba memuat ulang..."
+    : (e?.response?.data?.message ?? fallback);
+
+// Daftar unit dimuat terpisah dari data tabel. Gagal di sini tidak boleh
+// mengosongkan filter — selectedUnit tetap SEMUA supaya tabel tetap bisa dimuat.
+const loadUnits = async (maxAttempt = 3) => {
+  for (let attempt = 1; attempt <= maxAttempt; attempt++) {
+    try {
+      unitList.value = await unitApi.getAll();
+      if (!selectedUnit.value) selectedUnit.value = "SEMUA";
+      return;
+    } catch (e) {
+      console.error(`Gagal memuat daftar unit (percobaan ${attempt}):`, e);
+      if (attempt === maxAttempt) {
+        toast.warning("Daftar unit gagal dimuat, menampilkan SEMUA. Coba refresh.");
+        return;
+      }
+      await tidur(400 * attempt);
+    }
   }
+};
+
+onMounted(async () => {
+  await loadUnits();
+  await loadData();
 });
 
 const headers = [
@@ -224,7 +269,10 @@ const loadData = async ({ confirmed = false }: { confirmed?: boolean } = {}) => 
       toast.info("Tidak ada karyawan aktif pada unit ini.");
     }
   } catch (e: any) {
-    if (request === loadRequest) toast.error(e.response?.data?.message ?? "Gagal memuat karyawan.");
+    if (request === loadRequest) {
+      console.error("Gagal memuat karyawan absensi:", e);
+      toast.error(pesanMuat(e, "Gagal memuat karyawan."));
+    }
   } finally {
     if (request === loadRequest) isLoading.value = false;
   }
