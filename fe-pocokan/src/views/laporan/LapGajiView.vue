@@ -76,11 +76,14 @@ const loadData = async () => {
       periode2.value
     );
 
-    items.value = data.map((item) => ({
-      ...item,
-      thp: roundTHPGaji(item.thp),
-      terbilang: formatTerbilangGaji(item.thp),
-    }));
+    items.value = data
+      .map((item) => ({
+        ...item,
+        thp: roundTHPGaji(item.thp),
+        terbilang: formatTerbilangGaji(item.thp),
+      }))
+      .filter((item) => item.thp !== 0)
+      .map((item, index) => ({ ...item, no: index + 1 }));
   } catch (e: any) {
     toast.error(
       e.response?.data?.message ??
