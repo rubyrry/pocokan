@@ -12,6 +12,8 @@ const MENU_ID = "10";
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -33,7 +35,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -48,7 +51,7 @@ const exportExcelData = () => {
       { header: "Kota", key: "kota", width: 16 },
       { header: "Total Hutang", key: "hutang", width: 18, currency: true },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -158,6 +161,7 @@ const formatRupiah = (val: number) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Data Supplier"
     :menu-id="MENU_ID"
     :icon="IconTruckDelivery"

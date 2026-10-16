@@ -31,6 +31,88 @@ const isSaving = ref(false);
 const isPulling = ref(false);
 let loadRequest = 0;
 
+// Read the rendered cells so navigation follows sorting, filters and the
+// current page without maintaining a second copy of the browse order.
+const editingCell = ref<string | null>(null);
+let replaceOnType = true;
+
+const onCellFocus = (event: FocusEvent) => {
+  editingCell.value = null;
+  replaceOnType = true;
+  (event.currentTarget as HTMLInputElement).select();
+};
+
+const onCellBlur = () => {
+  editingCell.value = null;
+  replaceOnType = true;
+};
+
+const onCellKeydown = (event: KeyboardEvent) => {
+  const input = event.currentTarget as HTMLInputElement;
+  if (isPulling.value || input.disabled) {
+    event.preventDefault();
+    return;
+  }
+  if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+
+  if (event.key === "F2") {
+    event.preventDefault();
+    editingCell.value = input.dataset.absensiCell ?? null;
+    replaceOnType = false;
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    editingCell.value = null;
+    replaceOnType = true;
+    input.select();
+    return;
+  }
+
+  const isEditing = editingCell.value === input.dataset.absensiCell;
+  const isArrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key);
+  if (isEditing && isArrow) return;
+
+  if (isArrow || event.key === "Enter" || event.key === "Tab") {
+    editingCell.value = null;
+    replaceOnType = true;
+    const cells = Array.from(
+      input.closest("tbody")?.querySelectorAll<HTMLInputElement>(
+        "input[data-absensi-cell]:not(:disabled)",
+      ) ?? [],
+    );
+    const index = cells.indexOf(input);
+    let target: HTMLInputElement | undefined;
+    if (index >= 0) {
+      if (event.key === "Tab") {
+        target = cells[index + (event.shiftKey ? -1 : 1)];
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        const neighbor = cells[index + (event.key === "ArrowLeft" ? -1 : 1)];
+        if (neighbor?.closest("tr") === input.closest("tr")) target = neighbor;
+      } else {
+        const column = cells.filter((cell) => cell.dataset.absensiColumn === input.dataset.absensiColumn);
+        const direction = event.key === "ArrowUp" || (event.key === "Enter" && event.shiftKey) ? -1 : 1;
+        target = column[column.indexOf(input) + direction];
+      }
+    }
+    // At either end, let Tab leave the table using normal browser focus order.
+    if (event.key === "Tab" && !target) return;
+    event.preventDefault();
+    if (target) {
+      target.focus();
+      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    } else {
+      input.select();
+    }
+    return;
+  }
+
+  if (!isEditing && (event.key.length === 1 || event.key === "Backspace" || event.key === "Delete")) {
+    if (replaceOnType || event.key === "Backspace" || event.key === "Delete") input.select();
+    replaceOnType = false;
+  }
+};
+
 // Input v-model.number bisa menghasilkan "", null, atau angka.
 const terisi = (value: unknown) => value !== null && value !== undefined && value !== "";
 
@@ -355,7 +437,8 @@ const handleTarikAbsensi = async () => {
 };
 
 const exportExcelData = () => {
-  if (!items.value.length) {
+  const exportItems = getExportItems();
+  if (!exportItems.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -375,13 +458,16 @@ const exportExcelData = () => {
       { header: "Kehadiran", key: "kehadiran", width: 12, align: "center" },
       { header: "Jam Lembur", key: "jamlembur", width: 12, align: "center" },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Absensi Karyawan"
     :menu-id="MENU_ID"
     :icon="IconClock"
@@ -474,6 +560,14 @@ const exportExcelData = () => {
           v-model.number="item.kehadiran"
           :disabled="isPulling"
           class="table-inp"
+          :class="{ 'is-editing': editingCell === `${item.no}:kehadiran` }"
+          :data-absensi-cell="`${item.no}:kehadiran`"
+          data-absensi-column="kehadiran"
+          :aria-label="`Kehadiran ${item.nama}`"
+          @focus="onCellFocus"
+          @blur="onCellBlur"
+          @keydown.stop="onCellKeydown"
+          @click.stop
           min="0"
           max="2"
           step="0.5"
@@ -489,6 +583,14 @@ const exportExcelData = () => {
           v-model.number="item.jamlembur"
           :disabled="isPulling"
           class="table-inp"
+          :class="{ 'is-editing': editingCell === `${item.no}:jamlembur` }"
+          :data-absensi-cell="`${item.no}:jamlembur`"
+          data-absensi-column="jamlembur"
+          :aria-label="`Jam lembur ${item.nama}`"
+          @focus="onCellFocus"
+          @blur="onCellBlur"
+          @keydown.stop="onCellKeydown"
+          @click.stop
           min="0"
           step="1"
           title="Kosongkan untuk mengembalikan ke NULL."
@@ -644,6 +746,12 @@ const exportExcelData = () => {
 }
 .table-inp:focus {
   border-color: #3B5998;
-  box-shadow: 0 0 0 1px #3B5998;
+  box-shadow: 0 0 0 2px #3B5998;
+  background: #eff6ff;
+}
+.table-inp.is-editing:focus {
+  border-color: #b45309;
+  box-shadow: 0 0 0 2px #b45309;
+  background: #fffbeb;
 }
 </style>

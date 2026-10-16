@@ -35,6 +35,11 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
   const items = ref<T[]>([]) as Ref<T[]>;
   const isLoading = ref(false);
   const selected = ref<T[]>([]);
+  const browseRef = ref<{
+    getExportItems: () => T[];
+    clearSearch?: () => void;
+  } | null>(null);
+  const getExportItems = (): T[] => browseRef.value?.getExportItems() ?? items.value;
 
   // ── Export dialog state ──────────────────────────────────────────────
   const showExportDialog = ref(false);
@@ -100,23 +105,24 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
 
   /** Export header data only (styled with exceljs) */
   const exportHeaderOnly = async (fileName = "Export_Data") => {
+    const exportItems = getExportItems();
     if (!canExport.value) {
       toast.error("Akses ditolak.");
       return;
     }
-    if (!items.value?.length) {
+    if (!exportItems.length) {
       toast.warning("Tidak ada data untuk diexport.");
       return;
     }
 
     isExporting.value = true;
     try {
-      const cols: ExportColumn[] = options.columns || inferColumns(items.value[0]);
+      const cols: ExportColumn[] = options.columns || inferColumns(exportItems[0]);
 
       await exportStyledHeader({
         title: options.exportTitle || fileName,
         columns: cols,
-        items: items.value as unknown as Record<string, any>[],
+        items: exportItems as unknown as Record<string, any>[],
         fileName,
       });
       toast.success(`Berhasil export ke ${fileName}.xlsx`);
@@ -129,11 +135,12 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
 
   /** Export detail (header + detail merged in flat sheet, styled) */
   const exportDetailOnly = async (fileName = "Export_Data") => {
+    const exportItems = getExportItems();
     if (!canExport.value) {
       toast.error("Akses ditolak.");
       return;
     }
-    if (!items.value?.length) {
+    if (!exportItems.length) {
       toast.warning("Tidak ada data untuk diexport.");
       return;
     }
@@ -147,7 +154,7 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
 
     try {
       // Fetch all details in parallel
-      const keys = items.value.map(
+      const keys = exportItems.map(
         (item: any) => item[detailKeyField] as string,
       );
 
@@ -180,7 +187,7 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
 
       // Determine columns
       const headerCols: ExportColumn[] =
-        options.columns || inferColumns(items.value[0]);
+        options.columns || inferColumns(exportItems[0]);
 
       // Infer detail columns from first non-empty detail
       let detailCols: ExportColumn[] = options.detailColumns || [];
@@ -198,7 +205,7 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
         headerColumns: headerCols,
         detailColumns: detailCols,
         detailKeyField,
-        headerItems: items.value as unknown as Record<string, any>[],
+        headerItems: exportItems as unknown as Record<string, any>[],
         detailMap,
         fileName,
       });
@@ -220,7 +227,7 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
       toast.error("Akses ditolak.");
       return;
     }
-    if (!items.value?.length) {
+    if (!getExportItems().length) {
       toast.warning("Tidak ada data untuk diexport.");
       return;
     }
@@ -240,6 +247,8 @@ export function useBrowse<T = any>(options: UseBrowseOptions<T>) {
   });
 
   return {
+    browseRef,
+    getExportItems,
     items,
     isLoading,
     selected,

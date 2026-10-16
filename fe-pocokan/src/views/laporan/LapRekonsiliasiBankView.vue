@@ -155,20 +155,23 @@ const fmtDate = (v: string) => {
 // ── Export ────────────────────────────────────────────────────────────
 const doExport = () =>
   exportRekonsiliasiBankMaster(
-    items.value,
+    getExportItems(),
     filterState.value.startDate,
     filterState.value.endDate
   );
 const doExportDetail = () =>
   exportRekonsiliasiBankDetail(
-    detailItems.value,
+    getExportItems().flatMap((row) => getDetail(row.Account, row.Tanggal)),
     filterState.value.startDate,
     filterState.value.endDate
   );
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Rekonsiliasi Bank"
     :icon="IconBuildingBank"
     :menu-id="MENU_ID"

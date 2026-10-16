@@ -16,8 +16,9 @@ const tabsStore = useTabsStore();
 
 const MENU_ID = "6";
 const toast = useToast();
-const browseRef = ref<any>(null);
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -162,6 +163,7 @@ const fmt = (v: number) => new Intl.NumberFormat("id-ID").format(v || 0);
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Account / Rekening"
     :menu-id="MENU_ID"
     :icon="IconBuildingBank"
@@ -175,7 +177,7 @@ const fmt = (v: number) => new Intl.NumberFormat("id-ID").format(v || 0);
     :can-edit="canEdit"
     :can-delete="canDelete"
     :can-export="canExport"
-    :export-fn="() => exportAccount(items ?? [])"
+    :export-fn="() => exportAccount(getExportItems())"
     search-placeholder="Cari account..."
     @refresh="fetchData"
     @add="openCreate"

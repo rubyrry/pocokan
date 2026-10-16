@@ -33,6 +33,8 @@ const DEFAULT_REK_KODE = "17.004";
 const DEFAULT_REK_NAMA = "Persediaan Barang Jadi"; // Persediaan Barang Jadi
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -70,7 +72,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) — SELURUH data, tanpa filter periode ─────────
 const exportCsv = async () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -98,7 +101,7 @@ const exportCsv = async () => {
   sheet.mergeCells(1, 1, 1, cols.length);
   sheet.getCell(
     "A1"
-  ).value = `Export Data Barang Jadi (${items.value.length} data)`;
+  ).value = `Export Data Barang Jadi (${exportItems.length} data)`;
   sheet.getCell("A1").font = { bold: true, size: 12 };
   sheet.getCell("A1").alignment = { vertical: "middle" };
   sheet.getRow(1).height = 22;
@@ -115,7 +118,7 @@ const exportCsv = async () => {
     cell.border = { bottom: { style: "thin" } };
   });
 
-  items.value.forEach((item: any) => {
+  exportItems.forEach((item: any) => {
     const row = sheet.addRow({
       brg_kode: item.brg_kode,
       brg_nama: item.brg_nama,
@@ -519,6 +522,7 @@ const fmtCurrency = (v: number) =>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Barang Jadi"
     :menu-id="MENU_ID"
     :icon="IconBox"

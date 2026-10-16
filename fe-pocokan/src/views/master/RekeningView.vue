@@ -12,6 +12,8 @@ const MENU_ID = "6"; // Sesuaikan Menu ID Rekening
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -33,7 +35,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -47,7 +50,7 @@ const exportExcelData = () => {
       { header: "Urutan", key: "urutan", width: 10, align: "center" },
       { header: "Status", key: "statusLabel", width: 14, align: "center" },
     ],
-    rows: items.value.map((item: any) => ({
+    rows: exportItems.map((item: any) => ({
       ...item,
       statusLabel: (item.ISAKTIF === 1 || item.isAktif === 1 || item.REK_ISAKTIF === 1) ? "AKTIF" : "NON-AKTIF",
     })),
@@ -165,6 +168,7 @@ const handleDelete = async (item: any) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Rekening"
     :menu-id="MENU_ID"
 	:headers="headers"

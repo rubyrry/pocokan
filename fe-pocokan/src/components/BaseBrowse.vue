@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from "vue";
 import { useRoute } from "vue-router";
+import { useLocale } from "vuetify";
+import { sortItems } from "vuetify/lib/components/VDataTable/composables/sort.js";
 import PageLayout from "@/components/PageLayout.vue";
 import ColumnFilter, {
   type FilterType,
@@ -121,6 +123,7 @@ watch(
 );
 
 const route = useRoute();
+const locale = useLocale();
 const storageKey = computed(() => `finance_browse_${route.path}`);
 const loadState = () => {
   try {
@@ -635,7 +638,22 @@ const clearSelection = () => {
 const tableLayout = computed(() => (props.fixedLayout ? "fixed" : "auto"));
 const tdMaxWidth = computed(() => (props.fixedLayout ? "0" : "none"));
 
-defineExpose({ clearSelection, search });
+// Export all matching rows using the same sorter and locale as VDataTable,
+// before pagination so changing pages does not change the exported dataset.
+const getExportItems = () => {
+  const rows = filteredItems.value.map((raw, value) => ({ raw, value }));
+  return sortItems(rows, sortBy.value, locale.current.value, {
+    transform: (item) => item.raw,
+    sortFunctions: Object.fromEntries(
+      props.headers.filter((header) => header.sort).map((header) => [header.key, header.sort]),
+    ),
+    sortRawFunctions: Object.fromEntries(
+      props.headers.filter((header) => header.sortRaw).map((header) => [header.key, header.sortRaw]),
+    ),
+  }).map((item) => item.raw);
+};
+
+defineExpose({ clearSelection, search, getExportItems });
 watch(
   () => filteredItems.value.length,
   () => {

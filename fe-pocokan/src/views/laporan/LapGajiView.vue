@@ -31,6 +31,7 @@ const periode2 = ref(getTodayFormatted());
 // Data laporan
 type LapGajiReportItem = LapGajiItem & { terbilang: string };
 const items = ref<LapGajiReportItem[]>([]);
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
 const isLoading = ref(false);
 
 const headers = [
@@ -182,14 +183,15 @@ const sumSalaryRows = (rows: LapGajiReportItem[], key: SalaryNumericKey) =>
   rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
 
 const exportExcelData = async () => {
-  if (!items.value.length) {
+  const exportItems: LapGajiReportItem[] = browseRef.value?.getExportItems() ?? [];
+  if (!exportItems.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
 
   const groups = new Map<string, SalaryExportGroup>();
 
-  items.value.forEach((row) => {
+  exportItems.forEach((row) => {
     const unit = String(row.unit ?? "-").trim().toLowerCase() || "-";
     const payment: PaymentType =
       String(row.rekening ?? "").trim() === "" ? "cash" : "tf";
@@ -244,14 +246,14 @@ const exportExcelData = async () => {
       };
     });
 
-  const totalSemuaTHP = sumSalaryRows(items.value, "thp");
+  const totalSemuaTHP = sumSalaryRows(exportItems, "thp");
   sheets.unshift({
     name: "SEMUA",
     columns: laporanGajiExportColumns,
-    dataCount: items.value.length,
+    dataCount: exportItems.length,
     totalMergeThroughKey: "lemburGT2",
     rows: [
-      ...items.value,
+      ...exportItems,
       {
         no: "TOTAL",
         id: "",
@@ -261,9 +263,9 @@ const exportExcelData = async () => {
         hari: "",
         lemburLE2: "",
         lemburGT2: "",
-        kehadiran: sumSalaryRows(items.value, "kehadiran"),
-        lembur: sumSalaryRows(items.value, "lembur"),
-        potongan: sumSalaryRows(items.value, "potongan"),
+        kehadiran: sumSalaryRows(exportItems, "kehadiran"),
+        lembur: sumSalaryRows(exportItems, "lembur"),
+        potongan: sumSalaryRows(exportItems, "potongan"),
         thp: totalSemuaTHP,
         rekening: "",
         terbilang: formatTerbilangGaji(totalSemuaTHP),
@@ -314,6 +316,7 @@ const printSlipCash = () => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Laporan Gaji"
     :menu-id="MENU_ID"
     :icon="IconList"

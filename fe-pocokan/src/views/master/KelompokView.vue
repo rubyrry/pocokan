@@ -11,6 +11,8 @@ const MENU_ID = "7";
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -37,7 +39,8 @@ const keteranganLabel = (val: string) =>
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -49,7 +52,7 @@ const exportExcelData = () => {
       { header: "Nama", key: "nama", width: 34 },
       { header: "Keterangan", key: "keteranganLabel", width: 16, align: "center" },
     ],
-    rows: items.value.map((item: any) => ({
+    rows: exportItems.map((item: any) => ({
       ...item,
       keteranganLabel: keteranganLabel(item.keterangan),
     })),
@@ -134,6 +137,7 @@ const handleDelete = async (item: Kelompok) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Kelompok Account"
     :menu-id="MENU_ID"
     :icon="IconList"

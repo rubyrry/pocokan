@@ -11,6 +11,8 @@ const MENU_ID = "16"; // Pastikan ID ini sesuai di database
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -30,7 +32,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -43,7 +46,7 @@ const exportExcelData = () => {
       { header: "Penanggung Jawab", key: "penanggungjawab", width: 24 },
       { header: "Keterangan", key: "keterangan", width: 30 },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -120,6 +123,7 @@ const handleDelete = async (item: Gudang) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Data Gudang"
     :menu-id="MENU_ID"
     :icon="IconBuildingWarehouse"

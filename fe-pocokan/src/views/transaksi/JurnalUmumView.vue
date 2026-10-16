@@ -159,9 +159,9 @@ const confirmDelete = async () => {
 
 // ── Export ────────────────────────────────────────────────────────────
 const doExport = () =>
-  exportJurnalUmum(items.value, startDate.value, endDate.value);
+  exportJurnalUmum(getExportItems(), startDate.value, endDate.value);
 const doExportDetail = () =>
-  exportJurnalUmumDetail(detailItems.value, startDate.value, endDate.value);
+  exportJurnalUmumDetail(getExportItems().flatMap((row) => getDetail(row.Nomor)), startDate.value, endDate.value);
 
 // ── Row props ─────────────────────────────────────────────────────────
 const rowPropsFn = (data: any) => {
@@ -177,10 +177,13 @@ const fmtDate = (v: string) => {
   const [y, m, d] = v.split("-");
   return `${d}-${m}-${y}`;
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Jurnal Umum"
     :icon="IconBook"
     :menu-id="MENU_ID"

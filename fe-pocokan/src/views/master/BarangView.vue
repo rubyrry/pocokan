@@ -115,6 +115,8 @@ const searchText = ref("");
 const filterAktif = ref<number | "">(1);
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -160,7 +162,8 @@ const formatDecimal = (val: number | null | undefined): string => {
 };
 
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -191,7 +194,7 @@ const exportExcelData = () => {
       { header: "Ada Komposisi", key: "jmlKomposisi", width: 14, align: "center" },
       { header: "Aktif", key: "isAktif", width: 10, align: "center" },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -439,6 +442,7 @@ const totalBiayaLain = computed(() =>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     :key="refreshKey"
     title="Master Data Barang"
     :menu-id="MENU_ID"

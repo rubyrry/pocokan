@@ -11,6 +11,8 @@ const MENU_ID = "14"; // Sesuaikan dengan database tmenu Anda
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items, isLoading, selected, canInsert, canEdit, canDelete, canExport, fetchData
 } = useBrowse<Customer>({ menuId: MENU_ID, fetchApi: customerApi.getAll });
 
@@ -26,7 +28,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -42,7 +45,7 @@ const exportExcelData = () => {
       { header: "Contact Person", key: "cp", width: 20 },
       { header: "Total Piutang", key: "piutang", width: 18, currency: true },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -120,6 +123,7 @@ const formatRupiah = (v: number) => new Intl.NumberFormat("id-ID", { style: "cur
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Data Customer (Pelanggan)"
     :menu-id="MENU_ID"
     :icon="IconUsers"

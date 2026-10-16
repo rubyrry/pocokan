@@ -11,6 +11,8 @@ const MENU_ID = "95"; // Sesuaikan ID menu Cabang
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -30,7 +32,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -43,7 +46,7 @@ const exportExcelData = () => {
       { header: "Alamat", key: "alamat", width: 30 },
       { header: "Kota", key: "kota", width: 24 },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -120,6 +123,7 @@ const handleDelete = async (item: Cabang) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Data Cabang"
     :menu-id="MENU_ID"
     :icon="IconBuildingStore"

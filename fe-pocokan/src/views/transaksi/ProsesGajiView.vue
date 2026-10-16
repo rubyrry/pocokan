@@ -220,7 +220,8 @@ const handleSave = async () => {
 };
 
 const exportExcelData = () => {
-  if (!items.value.length) {
+  const exportItems = getExportItems();
+  if (!exportItems.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -242,16 +243,19 @@ const exportExcelData = () => {
       { header: "Lembur > 2", key: "lemburGT2", width: 14, align: "center" },
       { header: "Potongan", key: "potongan", width: 18, align: "right" },
     ],
-    rows: items.value.map((item) => ({
+    rows: exportItems.map((item) => ({
       ...item,
       potongan: item.potongan ?? "",
     })),
   });
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Proses Gaji"
     :menu-id="MENU_ID"
     :icon="IconCalculator"

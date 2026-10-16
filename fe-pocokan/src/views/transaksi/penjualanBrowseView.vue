@@ -466,7 +466,8 @@ const onPrintFromPreview = async () => {
 };
 
 const doExport = async () => {
-  if (items.value.length === 0) return toast.warning("Tidak ada data untuk diexport.");
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) return toast.warning("Tidak ada data untuk diexport.");
   try {
     await exportToExcel({
       title: "Penjualan (SO)",
@@ -483,7 +484,7 @@ const doExport = async () => {
         { header: "Status", key: "Status", width: 12, align: "center" },
         { header: "Kirim", key: "Kirim", width: 12, align: "center" },
       ],
-      rows: items.value,
+      rows: exportItems,
     });
     toast.success("Berhasil export data penjualan ke Excel!");
   } catch (e) {
@@ -502,10 +503,13 @@ const rowPropsFn = (data: any) => {
   if (row.Status === "Closed") cls += " row-closed";
   return { class: cls.trim() };
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Penjualan (SO)"
     :icon="IconShoppingCart"
     :menu-id="MENU_ID"

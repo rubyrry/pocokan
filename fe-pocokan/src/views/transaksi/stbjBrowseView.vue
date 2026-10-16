@@ -105,7 +105,8 @@ const onHapus = async () => {
 };
 
 const doExport = async () => {
-  if (items.value.length === 0) return toast.warning("Tidak ada data untuk diexport.");
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) return toast.warning("Tidak ada data untuk diexport.");
   await exportToExcel({
     title: "Surat Terima Barang Jadi (STBJ)",
     filenamePrefix: "STBJ",
@@ -117,9 +118,10 @@ const doExport = async () => {
       { header: "Keterangan", key: "Memo", width: 30 },
       { header: "Jml Item", key: "JumlahItem", width: 10, align: "center" },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>

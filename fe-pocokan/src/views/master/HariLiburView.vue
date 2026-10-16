@@ -17,6 +17,8 @@ const selectedYear = ref(currentYear);
 const tahunList = Array.from({ length: 8 }, (_, i) => currentYear - 5 + i);
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -62,7 +64,8 @@ const handleInsertSundays = async () => {
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -73,7 +76,7 @@ const exportExcelData = () => {
       { header: "Tanggal", key: "tanggal", width: 15, align: "center" },
       { header: "Keterangan", key: "keterangan", width: 40 },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -168,6 +171,7 @@ const handleDelete = async (item: HariLibur) => {
   </div>
 
   <BaseBrowse
+    ref="browseRef"
     title="Hari Libur"
     :menu-id="MENU_ID"
     :icon="IconCalendarEvent"

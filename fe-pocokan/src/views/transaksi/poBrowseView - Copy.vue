@@ -131,13 +131,15 @@ const showExportDialog = ref(false);
 const isExporting = ref(false);
 
 const handleExportClick = () => {
-  if (items.value.length === 0) {
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) {
     return toast.warning("Tidak ada data untuk diexport.");
   }
   showExportDialog.value = true;
 };
 
 const exportHeaderOnly = async () => {
+  const exportItems = getExportItems();
   showExportDialog.value = false;
   isExporting.value = true;
   try {
@@ -146,7 +148,7 @@ const exportHeaderOnly = async () => {
       filenamePrefix: "PO_Header",
       sheetName: "PO",
       columns: headers.map(h => ({ header: h.title, key: h.key, width: 20, align: h.align })),
-      rows: items.value,
+      rows: exportItems,
     });
     toast.success("Berhasil export header PO ke Excel!");
   } catch (e) {
@@ -157,11 +159,12 @@ const exportHeaderOnly = async () => {
 };
 
 const exportDetailOnly = async () => {
+  const exportItems = getExportItems();
   showExportDialog.value = false;
   isExporting.value = true;
   try {
     const flatRows: any[] = [];
-    for (const item of items.value) {
+    for (const item of exportItems) {
       let details = detailMap.value[item.Nomor];
       if (!details) {
         try {
@@ -261,10 +264,13 @@ const fmtDate = (val: string) => {
   return `${d}-${m}-${y}`;
 };
 const fmtQty = (v: number) => Number(v || 0).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Purchase Order Bahan (PO)"
     :icon="IconShoppingCart"
     :menu-id="MENU_ID"

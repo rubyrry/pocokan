@@ -18,6 +18,8 @@ const router = useRouter();
 
 // ── Browse ────────────────────────────────────────────────────────────
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -133,6 +135,7 @@ const handleDelete = async (item: CostCenter) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Cost Center"
     :menu-id="MENU_ID"
     :icon="IconAdjustments"
@@ -154,7 +157,7 @@ const handleDelete = async (item: CostCenter) => {
     @add="openCreate"
     @edit="openEdit"
     @delete="handleDelete"
-    :export-fn="() => exportCostCenter(items ?? [], 'browse')"
+    :export-fn="() => exportCostCenter(getExportItems(), 'browse')"
   >
     <!-- Expanded detail -->
     <template #detail="{ item }">
@@ -194,7 +197,7 @@ const handleDelete = async (item: CostCenter) => {
       <v-btn
         size="small"
         color="blue"
-        @click="exportCostCenter(items ?? [], 'detail')"
+        @click="exportCostCenter(getExportItems(), 'detail')"
       >
         Export Detail
       </v-btn>

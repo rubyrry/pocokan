@@ -208,13 +208,14 @@ const filteredItems = computed(() => {
 });
 
 const doExport = async () => {
-  if (filteredItems.value.length === 0) {
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) {
     toast.warning("Tidak ada data penjualan yang bisa di-export.");
     return;
   }
   try {
     await exportReturPembelian(
-      filteredItems.value, 
+      exportItems,
       startDate.value, 
       endDate.value
     );
@@ -231,6 +232,7 @@ const fmtCurrency = (v: number) =>
 const rowPropsFn = (data: any) => {
   return { class: "" };
 };  
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>

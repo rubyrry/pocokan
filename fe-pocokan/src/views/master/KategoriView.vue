@@ -19,6 +19,8 @@ const TINGKAT_OPTIONS = [
 const filterTingkat = ref<number>(1);
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -41,7 +43,8 @@ const headers = [
 
 // ── Export Excel ─────────────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -53,7 +56,7 @@ const exportExcelData = () => {
       { header: "Kode", key: "kode", width: 16, align: "center" },
       { header: "Nama", key: "nama", width: 34 },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -165,6 +168,7 @@ const handleDelete = async (item: Kategori) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Data Kategori"
     :menu-id="MENU_ID"
     :icon="IconCategory"

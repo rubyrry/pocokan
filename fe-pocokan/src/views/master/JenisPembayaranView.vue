@@ -14,6 +14,8 @@ const MENU_ID = "8";
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -70,6 +72,7 @@ const handleDelete = async (item: JenisPembayaran) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Jenis Pembayaran"
     :menu-id="MENU_ID"
     :icon="IconList"
@@ -83,7 +86,7 @@ const handleDelete = async (item: JenisPembayaran) => {
     :can-edit="false"
     :can-delete="canDelete"
     :can-export="canExport"
-    :export-fn="() => exportJenisPembayaran(items ?? [])"
+    :export-fn="() => exportJenisPembayaran(getExportItems())"
     search-placeholder="Cari jenis pembayaran..."
     @refresh="fetchData"
     @add="openCreate"

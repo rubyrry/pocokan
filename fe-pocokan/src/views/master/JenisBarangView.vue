@@ -12,6 +12,8 @@ const MENU_ID = "15";
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -112,7 +114,8 @@ const handleDelete = async (item: JenisBarang) => {
 };
 
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -124,13 +127,14 @@ const exportExcelData = () => {
       { header: "Nama Jenis Barang", key: "nama", width: 34 },
       { header: "Rekening", key: "rekNama", width: 30 },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Data Jenis Barang"
     :menu-id="MENU_ID"
     :icon="IconCategory2"

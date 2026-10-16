@@ -466,7 +466,7 @@ const fmtDate = (v: string) => {
 
 const doExport = () =>
   exportListJurnal(
-    items.value,
+    getExportItems(),
     filterState.value.startDate,
     filterState.value.endDate
   );
@@ -513,12 +513,15 @@ const doExportPivot = async () => {
     filterState.value.endDate
   );
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <!-- ── Grid tab ── -->
   <div v-show="activeTab === 'grid'">
     <BaseBrowse
+      ref="browseRef"
       title="List Jurnal"
       :icon="IconList"
       :menu-id="MENU_ID"

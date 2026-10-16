@@ -87,7 +87,8 @@ const formatKehadiran = (value: number) => {
 };
 
 const exportExcelData = () => {
-  if (!items.value.length) {
+  const exportItems = getExportItems();
+  if (!exportItems.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -104,22 +105,25 @@ const exportExcelData = () => {
       { header: "Kehadiran", key: "kehadiran", width: 14, align: "right" },
     ],
     rows: [
-      ...items.value,
+      ...exportItems,
       {
         pabrik: "",
         tanggal: "",
         nama: "",
         bagian: "",
         hari: "TOTAL",
-        kehadiran: totalKehadiran.value,
+        kehadiran: exportItems.reduce((sum, row) => sum + (Number(row.kehadiran) || 0), 0),
       } as any,
     ],
   });
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Laporan Absensi"
     :icon="IconList"
     :headers="headers"

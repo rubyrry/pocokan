@@ -11,6 +11,8 @@ const MENU_ID = "4"; // Sesuai dengan tmenu Karyawan
 const toast = useToast();
 
 const {
+  browseRef,
+  getExportItems,
   items, isLoading, selected, canInsert, canEdit, canDelete, canExport, fetchData
 } = useBrowse<Karyawan>({ menuId: MENU_ID, fetchApi: karyawanApi.getAll });
 
@@ -47,7 +49,8 @@ const headers = [
 
 // ── Export Excel (.xlsx) ────────────────────────────────────────────
 const exportExcelData = () => {
-  if (!items.value?.length) {
+  const exportItems = getExportItems();
+  if (!exportItems?.length) {
     toast.warning("Tidak ada data untuk diekspor.");
     return;
   }
@@ -63,7 +66,7 @@ const exportExcelData = () => {
       { header: "Gaji Pokok", key: "gapok", width: 18, currency: true },
       { header: "Lembur", key: "lembur", width: 16, currency: true },
     ],
-    rows: items.value,
+    rows: exportItems,
   });
 };
 
@@ -137,6 +140,7 @@ const handleDelete = async (item: Karyawan) => {
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master Karyawan"
     :menu-id="MENU_ID"
     :icon="IconUsers"

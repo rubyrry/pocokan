@@ -263,16 +263,19 @@ const fmtDate = (v: string) => {
 
 const doExport = () =>
   exportBukuBesar(
-    items.value,
+    getExportItems(),
     filterState.value.rekkode,
     filterState.value.reknama,
     filterState.value.startDate,
     filterState.value.endDate,
   );
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Buku Besar"
     :icon="IconBook"
     :menu-id="MENU_ID"

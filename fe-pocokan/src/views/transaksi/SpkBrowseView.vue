@@ -114,7 +114,8 @@ const onHapus = async () => {
 };
 
 const doExport = async () => {
-  if (items.value.length === 0) return toast.warning("Tidak ada data untuk diexport.");
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) return toast.warning("Tidak ada data untuk diexport.");
   try {
     await exportToExcel({
       title: "Surat Perintah Kerja (SPK)",
@@ -133,7 +134,7 @@ const doExport = async () => {
         { header: "Kirim", key: "JumlahKirim", width: 12, align: "end" },
         { header: "Status", key: "StatusView", width: 12, align: "center" },
       ],
-      rows: items.value,
+      rows: exportItems,
     });
   } catch {
     toast.error("Gagal melakukan export Excel.");
@@ -141,10 +142,13 @@ const doExport = async () => {
 };
 
 const fmt = (v: number) => new Intl.NumberFormat("id-ID").format(v || 0);
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Surat Perintah Kerja (SPK)"
     :icon="IconClipboardList"
     :menu-id="MENU_ID"

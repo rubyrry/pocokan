@@ -132,7 +132,8 @@ const onHapus = async () => {
 };
 
 const doExport = async () => {
-  if (items.value.length === 0) return toast.warning("Tidak ada data untuk diexport.");
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) return toast.warning("Tidak ada data untuk diexport.");
   try {
     await exportToExcel({
       title: "Bukti Penerimaan Barang (BPB)",
@@ -147,7 +148,7 @@ const doExport = async () => {
         { header: "Invoice", key: "IsInvoice", width: 10, align: "center" },
         { header: "Jml Item", key: "JumlahItem", width: 10, align: "center" },
       ],
-      rows: items.value,
+      rows: exportItems,
     });
     toast.success("Berhasil export data BPB ke Excel!");
   } catch (e) {
@@ -155,6 +156,7 @@ const doExport = async () => {
     toast.error("Gagal export data BPB ke Excel.");
   }
 };
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>

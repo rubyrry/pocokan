@@ -417,7 +417,8 @@ const onPrintFromPreview = async () => {
 };
 
 const doExport = async () => {
-  if (items.value.length === 0) return toast.warning("Tidak ada data untuk diexport.");
+  const exportItems = getExportItems();
+  if (exportItems.length === 0) return toast.warning("Tidak ada data untuk diexport.");
   try {
     await exportToExcel({
       title: "Invoice Pembelian",
@@ -435,7 +436,7 @@ const doExport = async () => {
         { header: "PPN", key: "Ppn", width: 16, currency: true },
         { header: "Status Bayar", key: "StatusBayar", width: 14, align: "center" },
       ],
-      rows: items.value,
+      rows: exportItems,
     });
     toast.success("Berhasil export data Invoice ke Excel!");
   } catch (e) {
@@ -445,6 +446,8 @@ const doExport = async () => {
 };
 
 const doExportWithDetail = async () => {
+  const exportItems = getExportItems();
+  if (!exportItems.length) return toast.warning("Tidak ada data untuk diexport.");
   try {
     toast.info("Mengambil data export beserta detail...");
     const response = await invApi.getExportDetail(startDate.value, endDate.value);
@@ -454,33 +457,42 @@ const doExportWithDetail = async () => {
       return toast.warning("Tidak ada data untuk diexport.");
     }
 
-    const detailedRows = rawData.map((d: any) => {
-      const qty = Number(d.Qty || 0);
-      const harga = Number(d.Harga || 0);
-      const discPr = Number(d.DiscPr || 0);
-      
-      return {
-        Nomor: d.Nomor,
-        Nobukti: d.Nobukti,
-        Tanggal: d.Tanggal,
-        JatuhTempo: d.JatuhTempo,
-        NomorBPB: d.NomorBPB,
-        Supplier: d.Supplier,
-        Memo: d.Memo,
-        StatusBayar: d.StatusBayar,
-        NoUrut: d.NoUrut || "-",
-        Barcode: d.Barcode || "-",
-        NamaBarang: d.NamaBarang || "-",
-        Satuan: d.Satuan || "-",
-        Qty: qty,
-        Harga: harga,
-        DiscPr: discPr,
-        Subtotal: qty * harga - (qty * harga * discPr) / 100,
-      };
-    });
+    const detailsByNomor = new Map<string, any[]>();
+    for (const detail of rawData) {
+      const rows = detailsByNomor.get(detail.Nomor) ?? [];
+      rows.push(detail);
+      detailsByNomor.set(detail.Nomor, rows);
+    }
+    const detailedRows = exportItems
+      .flatMap((item) => detailsByNomor.get(item.Nomor) ?? [])
+      .map((d: any) => {
+        const qty = Number(d.Qty || 0);
+        const harga = Number(d.Harga || 0);
+        const discPr = Number(d.DiscPr || 0);
 
-    await exportToExcel({
-      title: "Invoice Pembelian (With Detail)",
+        return {
+          Nomor: d.Nomor,
+          Nobukti: d.Nobukti,
+          Tanggal: d.Tanggal,
+          JatuhTempo: d.JatuhTempo,
+          NomorBPB: d.NomorBPB,
+          Supplier: d.Supplier,
+          Memo: d.Memo,
+          StatusBayar: d.StatusBayar,
+          NoUrut: d.NoUrut || "-",
+          Barcode: d.Barcode || "-",
+          NamaBarang: d.NamaBarang || "-",
+          Satuan: d.Satuan || "-",
+          Qty: qty,
+          Harga: harga,
+          DiscPr: discPr,
+          Subtotal: qty * harga - (qty * harga * discPr) / 100,
+        };
+      });
+
+  if (!detailedRows.length) return toast.warning("Tidak ada data detail untuk diexport.");
+  await exportToExcel({
+    title: "Invoice Pembelian (With Detail)",
       filenamePrefix: "Invoice_Detail",
       sheetName: "Invoice Detail",
       columns: [
@@ -513,6 +525,7 @@ const doExportWithDetail = async () => {
 const fmtCurrency = (v: number) =>
   new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0);
 const fmt = (v: number) => new Intl.NumberFormat("id-ID").format(v || 0);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>

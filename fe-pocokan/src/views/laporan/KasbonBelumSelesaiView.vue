@@ -211,20 +211,23 @@ const fmtDate = (v: string) => {
 // ── Export ────────────────────────────────────────────────────────────
 const doExport = () =>
   exportKasbonBelumSelesai(
-    items.value,
+    getExportItems(),
     filterState.value.rekkode,
     filterState.value.reknama
   );
 const doExportDetail = () =>
   exportKasbonBelumSelesaiDetail(
-    detailItems.value,
+    getExportItems().flatMap((row) => getDetail(row.Nomor)),
     filterState.value.rekkode,
     filterState.value.reknama
   );
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Kasbon Belum Selesai"
     :icon="IconReceipt2"
     :menu-id="MENU_ID"

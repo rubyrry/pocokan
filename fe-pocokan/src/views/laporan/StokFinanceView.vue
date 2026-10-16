@@ -131,11 +131,14 @@ const totalReal = computed(() =>
 
 const fmt = (v: number) => new Intl.NumberFormat("id-ID").format(v || 0);
 
-const doExport = () => exportStokFinance(items.value, filterState.value.cabang);
+const doExport = () => exportStokFinance(getExportItems(), filterState.value.cabang);
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Stok Finance"
     :icon="IconList"
     :menu-id="MENU_ID"

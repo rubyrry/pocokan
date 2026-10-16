@@ -177,13 +177,13 @@ const onPosting = () => {
 // ── Export ────────────────────────────────────────────────────────────
 const doExport = () =>
   exportPembayaranCustomer(
-    items.value,
+    getExportItems(),
     filterState.value.startDate,
     filterState.value.endDate
   );
 const doExportDetail = () =>
   exportPembayaranCustomerDetail(
-    detailItems.value,
+    getExportItems().flatMap((row) => getDetail(row.Nomor)),
     filterState.value.startDate,
     filterState.value.endDate
   );
@@ -199,10 +199,13 @@ const fmtDate = (v: string) => {
   const [y, m, d] = v.split("-");
   return `${d}-${m}-${y}`;
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Posting Pembayaran Customer"
     :icon="IconFileInvoice"
     :menu-id="MENU_ID"

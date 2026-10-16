@@ -14,6 +14,8 @@ const toast = useToast();
 const MENU_ID = "1";
 
 const {
+  browseRef,
+  getExportItems,
   items,
   isLoading,
   selected,
@@ -75,11 +77,12 @@ const confirmDelete = async () => {
   }
 };
 
-const doExport = () => exportMasterUser(items.value ?? []);
+const doExport = () => exportMasterUser(getExportItems() ?? []);
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Master User"
     :icon="IconUsers"
     :menu-id="MENU_ID"

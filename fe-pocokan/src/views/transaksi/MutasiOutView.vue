@@ -187,9 +187,20 @@ const onPrint = () => {
 };
 
 const onExportDetail = async () => {
-  if (!items.value.length)
+  const exportItems = getExportItems();
+  if (!exportItems.length)
     return toast.warning("Tidak ada data untuk diexport.");
-  await exportMutasiOut(items.value, dtlCache.value);
+  try {
+    const details = await Promise.all(
+      exportItems.map(async (row) => [
+        row.Nomor,
+        dtlCache.value[row.Nomor] ?? await mutasiOutApi.getDetail(row.Nomor),
+      ] as const),
+    );
+    await exportMutasiOut(exportItems, Object.fromEntries(details));
+  } catch (error: any) {
+    if (!isAuthExpiredError(error)) toast.error("Gagal mengekspor detail Mutasi Out.");
+  }
 };
 
 // ── PIN Dialog ────────────────────────────────────────────────────────
@@ -254,10 +265,13 @@ const getNomorStyle = (ngedit: string) => {
   if (ngedit === "ACC") return "background:#3B5998;color:#fff;";
   return "";
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Mutasi Out Garmen"
     :icon="IconTruckDelivery"
     :menu-id="MENU_ID"

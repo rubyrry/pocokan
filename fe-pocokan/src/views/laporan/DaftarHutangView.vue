@@ -129,16 +129,18 @@ const totalAll = computed(() =>
 
 // ── Export ────────────────────────────────────────────────────────────
 const doExport = () => {
-  if (!items.value.length)
+  const exportItems = getExportItems();
+  if (!exportItems.length)
     return toast.warning("Tidak ada data untuk diexport.");
-  exportDaftarHutang(items.value, startDate.value, endDate.value);
+  exportDaftarHutang(exportItems, startDate.value, endDate.value);
 };
 
 const doExportDetail = () => {
-  if (!items.value.length)
+  const exportItems = getExportItems();
+  if (!exportItems.length)
     return toast.warning("Tidak ada data untuk diexport.");
   exportDaftarHutangDetail(
-    items.value,
+    exportItems,
     detailItems.value,
     startDate.value,
     endDate.value
@@ -167,10 +169,13 @@ const rowPropsFn = (data: any) => {
   }
   return {};
 };
+const browseRef = ref<InstanceType<typeof BaseBrowse> | null>(null);
+const getExportItems = (): typeof items.value => browseRef.value?.getExportItems() ?? [];
 </script>
 
 <template>
   <BaseBrowse
+    ref="browseRef"
     title="Daftar Hutang"
     :icon="IconList"
     menu-id="0"
